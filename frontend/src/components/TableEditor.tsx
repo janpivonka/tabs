@@ -1,6 +1,6 @@
 // src/components/TableEditor.tsx
-import { useState, useRef } from "react";
-import type { TableData } from "../lib/storage";
+import type { Table } from "../domain/table";
+import { useTableEditor } from "../hooks/useTableEditor";
 
 export function TableEditor({
   table,
@@ -8,122 +8,23 @@ export function TableEditor({
   onSave,
   onExport,
 }: {
-  table: TableData;
-  onUpdate: (updated: TableData, description?: string) => void;
+  table: Table;
+  onUpdate: (updated: Table, description?: string) => void;
   onSave: () => void;
   onExport: () => void;
 }) {
-  const [selectedCell, setSelectedCell] = useState<{ row: number; col: number } | null>(null);
-  const changeTimeout = useRef<NodeJS.Timeout | null>(null);
-  const pendingChange = useRef<{ updated: TableData; description: string } | null>(null);
-
   if (!table) return null;
 
-  // Přidá ID do prvního sloupce
-  const applyAutoIds = (rows: string[][]) =>
-    rows.map((r, i) => {
-      const row = [...r];
-      row[0] = String(i + 1);
-      return row;
-    });
-
-  // Odložené volání onUpdate pro debounce
-  const scheduleUpdate = (updated: TableData, description: string) => {
-    pendingChange.current = { updated, description };
-    if (changeTimeout.current) clearTimeout(changeTimeout.current);
-    changeTimeout.current = setTimeout(() => {
-      if (pendingChange.current) {
-        onUpdate(pendingChange.current.updated, pendingChange.current.description);
-        pendingChange.current = null;
-      }
-    }, 300);
-  };
-
-  const getSelectedDescription = () => {
-    if (!selectedCell) return ["1", table.columns[1]]; // default ID a první datový sloupec
-    const rowId = table.rows[selectedCell.row][0];
-    const colName = table.columns[selectedCell.col];
-    return [rowId, colName];
-  };
-
-  const updateCell = (row: number, col: number, value: string) => {
-    if (col === 0) return; // ID nelze měnit
-    const updated = {
-      ...table,
-      rows: applyAutoIds(
-        table.rows.map((r, ri) => (ri === row ? r.map((c, ci) => (ci === col ? value : c)) : r))
-      ),
-    };
-    const [rowId, colName] = getSelectedDescription();
-    const desc = `Upraveno: buňka [${rowId}, ${colName}]`;
-    scheduleUpdate(updated, desc);
-  };
-
-  const updateColumnName = (colIndex: number, newName: string) => {
-    const updated = { ...table, columns: table.columns.map((c, i) => (i === colIndex ? newName : c)) };
-    const [rowId, _] = getSelectedDescription();
-    const desc = `Upraveno: sloupec [${rowId}, ${newName}]`;
-    scheduleUpdate(updated, desc);
-  };
-
-  const addRow = (position: "above" | "below") => {
-    const idx = selectedCell ? selectedCell.row : table.rows.length;
-    const insertIndex = position === "above" ? idx : idx + 1;
-    const emptyRow = new Array(table.columns.length).fill("");
-    const updated = {
-      ...table,
-      rows: applyAutoIds([...table.rows.slice(0, insertIndex), emptyRow, ...table.rows.slice(insertIndex)]),
-    };
-    const [rowId, colName] = getSelectedDescription();
-    const desc = selectedCell
-      ? `Přidán řádek ${position} [${rowId}, ${colName}]`
-      : `Přidán řádek na ${position === "above" ? "začátek" : "konec"}`;
-    scheduleUpdate(updated, desc);
-
-    if (selectedCell && position === "above")
-      setSelectedCell({ row: selectedCell.row + 1, col: selectedCell.col });
-  };
-
-  const deleteRow = () => {
-    if (!selectedCell) return;
-    if (!confirm("Opravdu chcete data smazat?")) return;
-    const updated = { ...table, rows: applyAutoIds(table.rows.filter((_, i) => i !== selectedCell.row)) };
-    const [rowId, colName] = getSelectedDescription();
-    const desc = `Smazán řádek [${rowId}, ${colName}]`;
-    scheduleUpdate(updated, desc);
-    setSelectedCell(null);
-  };
-
-  const addColumn = (position: "before" | "after") => {
-    const idx = selectedCell ? selectedCell.col : table.columns.length - 1;
-    const insertIndex = position === "before" ? idx : idx + 1;
-    const newColumns = [...table.columns.slice(0, insertIndex), "nový sloupec", ...table.columns.slice(insertIndex)];
-    const newRows = table.rows.map(r => [...r.slice(0, insertIndex), "", ...r.slice(insertIndex)]);
-    const updated = { ...table, columns: newColumns, rows: applyAutoIds(newRows) };
-    const [rowId, colName] = getSelectedDescription();
-    const desc = selectedCell
-      ? `Přidán sloupec ${position} [${rowId}, ${colName}]`
-      : `Přidán sloupec na ${position === "before" ? "začátek" : "konec"}`;
-    scheduleUpdate(updated, desc);
-
-    if (selectedCell && position === "before")
-      setSelectedCell({ row: selectedCell.row, col: selectedCell.col + 1 });
-  };
-
-  const deleteColumn = () => {
-    if (!selectedCell || selectedCell.col === 0) return alert("Sloupec ID nelze odstranit.");
-    if (!confirm("Opravdu chcete data smazat?")) return;
-    const idx = selectedCell.col;
-    const updated = {
-      ...table,
-      columns: table.columns.filter((_, i) => i !== idx),
-      rows: table.rows.map(r => r.filter((_, i) => i !== idx)),
-    };
-    const [rowId, colName] = getSelectedDescription();
-    const desc = `Smazán sloupec [${rowId}, ${colName}]`;
-    scheduleUpdate(updated, desc);
-    setSelectedCell(null);
-  };
+  const {
+    selectedCell,
+    setSelectedCell,
+    updateCell,
+    updateColumnName,
+    addRow,
+    deleteRow,
+    addColumn,
+    deleteColumn,
+  } = useTableEditor(table, onUpdate);
 
   return (
     <div className="p-4 w-full">
@@ -158,9 +59,7 @@ export function TableEditor({
               {row.map((cell, cIdx) => (
                 <td
                   key={cIdx}
-                  className={`border px-2 py-1 ${
-                    selectedCell?.row === rIdx && selectedCell?.col === cIdx ? "bg-yellow-200" : ""
-                  }`}
+                  className={`border px-2 py-1 ${selectedCell?.row === rIdx && selectedCell?.col === cIdx ? "bg-yellow-200" : ""}`}
                   onClick={() => setSelectedCell({ row: rIdx, col: cIdx })}
                 >
                   {cIdx === 0 ? (

@@ -1,11 +1,5 @@
 // src/lib/storage.ts
-
-export interface TableData {
-  id: string;
-  name: string;
-  columns: string[];
-  rows: string[][];
-}
+import type { Table } from "../domain/table";
 
 const LOCAL_STORAGE_TABLES_KEY = "peony_tables";
 
@@ -26,15 +20,15 @@ function safeParse<T>(value: string | null, fallback: T): T {
 /**
  * Načte tabulky z localStorage
  */
-export function loadTables(): TableData[] {
+export function loadTables(): Table[] {
   const raw = localStorage.getItem(LOCAL_STORAGE_TABLES_KEY);
-  return safeParse<TableData[]>(raw, []);
+  return safeParse<Table[]>(raw, []);
 }
 
 /**
  * Uloží tabulky do localStorage
  */
-export function saveTables(tables: TableData[]): void {
+export function saveTables(tables: Table[]): void {
   try {
     localStorage.setItem(
       LOCAL_STORAGE_TABLES_KEY,
@@ -47,7 +41,6 @@ export function saveTables(tables: TableData[]): void {
 
 /**
  * Smaže tabulky z localStorage
- * (zatím nepoužito, ale připraveno)
  */
 export function clearTables(): void {
   try {
