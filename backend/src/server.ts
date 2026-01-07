@@ -1,21 +1,23 @@
-import expressPkg from "express";
-const { json } = expressPkg;
+import express from "express";
 import cors from "cors";
-import tablesRoutes from "./routes/tables.ts";
-import { errorHandler } from "./middleware/errorHandler.ts";
+import tableRoutes from "./modules/table/table.routes.js";
+import { errorHandler } from "./shared/middleware/errorHandler.js";
 
-const app = expressPkg();
+const app = express();
+
 app.use(cors());
-app.use(json());
+app.use(express.json());
 
-const PORT = 4000;
+app.use("/tables", tableRoutes);
 
-app.use("/tables", tablesRoutes);
+app.get("/", (_req, res) => res.send("Backend běží"));
+app.get("/health", (_req, res) =>
+  res.json({ ok: true, ts: new Date().toISOString() })
+);
 
-app.get("/", (_req, res) => res.send("Backend běží 👍"));
-app.get("/health", (_req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
-
-// Error handling middleware musí být až nakonec
 app.use(errorHandler);
 
-app.listen(PORT, () => console.log(`Backend běží na http://localhost:${PORT}`));
+const PORT = 4000;
+app.listen(PORT, () => {
+  console.log(`Backend běží na http://localhost:${PORT}`);
+});
