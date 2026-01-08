@@ -1,6 +1,6 @@
 import { Sidebar } from "./components/Sidebar";
 import { TableEditor } from "./components/table";
-import { HistoryPanel } from "./components/HistoryPanel";
+import { HistoryPanel } from "./components/history/HistoryPanel";
 import { useApp } from "./hooks/useApp";
 
 export default function App() {

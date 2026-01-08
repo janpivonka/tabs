@@ -1,4 +1,4 @@
-import type { TableAction } from "../hooks/useApp";
+import type { TableAction } from "../../hooks/useApp";
 
 interface HistoryPanelProps {
   history: TableAction[];
