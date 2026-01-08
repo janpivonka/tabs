@@ -1,6 +1,6 @@
 // src/components/TableEditor.tsx
-import type { Table } from "../domain/table";
-import { useTableEditor } from "../hooks/useTableEditor";
+import type { Table } from "../../domain/table";
+import { useTableEditor } from "../../hooks/useTableEditor";
 
 export function TableEditor({
   table,
