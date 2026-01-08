@@ -1,5 +1,5 @@
 import { Sidebar } from "./components/Sidebar";
-import { TableEditor } from "./components/table/TableEditor";
+import { TableEditor } from "./components/table";
 import { HistoryPanel } from "./components/HistoryPanel";
 import { useApp } from "./hooks/useApp";
 
