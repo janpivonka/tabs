@@ -1,5 +1,5 @@
 // src/components/TableList.tsx
-import type { Table } from "../domain/table";
+import type { Table } from "../../domain/table";
 import { TableItem } from "./TableItem";
 
 interface TableListProps {

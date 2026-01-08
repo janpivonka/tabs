@@ -1,8 +1,8 @@
 // src/components/Sidebar.tsx
 import { useSidebar } from "../hooks/useSidebar";
-import { TableList } from "./TableList";
+import { TableList } from "./table/TableList";
 import { SidebarFooter } from "./SidebarFooter";
-import { DeleteModal } from "./DeleteModal";
+import { DeleteModal } from "./table/DeleteModal";
 
 export function Sidebar(props: any) {
   const {

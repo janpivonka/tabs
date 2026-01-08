@@ -1,5 +1,5 @@
 // src/components/DeleteModal.tsx
-import type { Table } from "../domain/table";
+import type { Table } from "../../domain/table";
 
 interface DeleteModalProps {
   table: Table;
