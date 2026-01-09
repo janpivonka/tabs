@@ -13,95 +13,139 @@ export interface TableAction {
 
 export function useHistory() {
   const [history, setHistory] = useState<TableAction[]>([]);
-  const [historyIndex, setHistoryIndex] = useState<number>(-1);
+  const [historyIndex, setHistoryIndex] = useState(-1);
 
+  // ref jen pro synchronní přístup v undo/redo
   const historyRef = useRef<TableAction[]>([]);
-  const historyIndexRef = useRef<number>(-1);
+  const indexRef = useRef(-1);
 
   useEffect(() => { historyRef.current = history; }, [history]);
-  useEffect(() => { historyIndexRef.current = historyIndex; }, [historyIndex]);
+  useEffect(() => { indexRef.current = historyIndex; }, [historyIndex]);
 
+  /** ---------- init z localStorage ---------- */
   useEffect(() => {
-    const storedRaw = localStorage.getItem("peony_history");
-    const storedHistory: TableAction[] = storedRaw && storedRaw !== "undefined" ? JSON.parse(storedRaw) : [];
-    setHistory(storedHistory);
-    historyRef.current = storedHistory;
-    const lastIndex = storedHistory.length - 1;
-    setHistoryIndex(lastIndex);
-    historyIndexRef.current = lastIndex;
+    const raw = localStorage.getItem("peony_history");
+    const stored: TableAction[] =
+      raw && raw !== "undefined" ? JSON.parse(raw) : [];
+
+    setHistory(stored);
+    historyRef.current = stored;
+
+    const last = stored.length - 1;
+    setHistoryIndex(last);
+    indexRef.current = last;
   }, []);
 
-  const pushHistory = (table: TableData, type: TableAction["type"], description: string) => {
-    const snapshot = JSON.parse(JSON.stringify(table));
-    const action: TableAction = { id: uuid(), timestamp: Date.now(), tableId: table.id, type, description, snapshot };
+  /** ---------- helpers ---------- */
+  const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
 
-    const newHistory = [...historyRef.current.slice(0, historyIndexRef.current + 1), action];
-    const newIndex = newHistory.length - 1;
-
-    setHistory(newHistory);
-    historyRef.current = newHistory;
-    setHistoryIndex(newIndex);
-    historyIndexRef.current = newIndex;
-
-    localStorage.setItem("peony_history", JSON.stringify(newHistory));
+  const findPreviousSnapshot = (tableId: string, fromIndex: number): TableData | null => {
+    for (let i = fromIndex - 1; i >= 0; i--) {
+      if (historyRef.current[i].tableId === tableId) {
+        return historyRef.current[i].snapshot;
+      }
+    }
+    return null;
   };
 
-  const applyUndoRedo = (currentTables: TableData[], action: TableAction, index: number, mode: "undo" | "redo") => {
-    let newTables = [...currentTables];
-    const useSnapshot = (snapshot: TableData) => {
-      const idx = newTables.findIndex(t => t.id === snapshot.id);
-      if (idx >= 0) newTables[idx] = snapshot;
-      else newTables = [snapshot, ...newTables];
+  const applySnapshot = (tables: TableData[], snapshot: TableData) => {
+    const idx = tables.findIndex(t => t.id === snapshot.id);
+    if (idx >= 0) {
+      const copy = [...tables];
+      copy[idx] = snapshot;
+      return copy;
+    }
+    return [snapshot, ...tables];
+  };
+
+  /** ---------- public API ---------- */
+  const pushHistory = (
+    table: TableData,
+    type: TableAction["type"],
+    description: string
+  ) => {
+    const action: TableAction = {
+      id: uuid(),
+      timestamp: Date.now(),
+      tableId: table.id,
+      type,
+      description,
+      snapshot: clone(table),
     };
 
-    switch (action.type) {
-      case "row_add":
-        newTables = mode === "undo" ? newTables.filter(t => t.id !== action.tableId) : [action.snapshot, ...newTables];
-        break;
-      case "row_delete":
-        newTables = mode === "undo" ? [action.snapshot, ...newTables] : newTables.filter(t => t.id !== action.tableId);
-        break;
-      case "cell":
-      case "rename":
-        if (mode === "redo") {
-          // tady musíme použít snapshot přímo z akce, ne hledat předchozí
-          useSnapshot(action.snapshot);
-        } else {
-          // undo: najdeme předchozí snapshot tabulky
-          let snapshotToUse = action.snapshot;
-          for (let i = index - 1; i >= 0; i--) {
-            if (historyRef.current[i].tableId === action.tableId) {
-              snapshotToUse = historyRef.current[i].snapshot;
-              break;
-            }
-          }
-          useSnapshot(snapshotToUse);
-        }
-        break;
-    }
-    return newTables;
+    const next = [
+      ...historyRef.current.slice(0, indexRef.current + 1),
+      action,
+    ];
+
+    const nextIndex = next.length - 1;
+
+    setHistory(next);
+    setHistoryIndex(nextIndex);
+    historyRef.current = next;
+    indexRef.current = nextIndex;
+
+    localStorage.setItem("peony_history", JSON.stringify(next));
   };
 
-  const undo = (setTables: (tables: TableData[]) => void, setCurrentId: (id: string | null) => void) => {
-    setHistoryIndex(prevIndex => {
-      if (prevIndex < 0) return prevIndex;
-      const action = historyRef.current[prevIndex];
-      setTables(currentTables => applyUndoRedo(currentTables, action, prevIndex, "undo"));
-      historyIndexRef.current = prevIndex - 1;
+  const applyAction = (
+    tables: TableData[],
+    action: TableAction,
+    index: number,
+    mode: "undo" | "redo"
+  ): TableData[] => {
+    switch (action.type) {
+      case "row_add":
+        return mode === "undo"
+          ? tables.filter(t => t.id !== action.tableId)
+          : [action.snapshot, ...tables];
+
+      case "row_delete":
+        return mode === "undo"
+          ? [action.snapshot, ...tables]
+          : tables.filter(t => t.id !== action.tableId);
+
+      case "cell":
+      case "rename": {
+        if (mode === "redo") {
+          return applySnapshot(tables, action.snapshot);
+        }
+        const prev = findPreviousSnapshot(action.tableId, index);
+        return prev ? applySnapshot(tables, prev) : tables;
+      }
+    }
+  };
+
+  const undo = (
+    setTables: (t: TableData[]) => void,
+    setCurrentId: (id: string | null) => void
+  ) => {
+    setHistoryIndex(i => {
+      if (i < 0) return i;
+
+      const action = historyRef.current[i];
+      setTables(t => applyAction(t, action, i, "undo"));
+
+      indexRef.current = i - 1;
       setCurrentId(action.tableId);
-      return prevIndex - 1;
+      return i - 1;
     });
   };
 
-  const redo = (setTables: (tables: TableData[]) => void, setCurrentId: (id: string | null) => void) => {
-    setHistoryIndex(prevIndex => {
-      const nextIndex = prevIndex + 1;
-      if (nextIndex >= historyRef.current.length) return prevIndex;
-      const action = historyRef.current[nextIndex];
-      setTables(currentTables => applyUndoRedo(currentTables, action, nextIndex, "redo"));
-      historyIndexRef.current = nextIndex;
+  const redo = (
+    setTables: (t: TableData[]) => void,
+    setCurrentId: (id: string | null) => void
+  ) => {
+    setHistoryIndex(i => {
+      const next = i + 1;
+      if (next >= historyRef.current.length) return i;
+
+      const action = historyRef.current[next];
+      setTables(t => applyAction(t, action, next, "redo"));
+
+      indexRef.current = next;
       setCurrentId(action.tableId);
-      return nextIndex;
+      return next;
     });
   };
 
