@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import type { TableData } from "../lib/storage";
 import { v4 as uuid } from "uuid";
 
@@ -149,7 +149,7 @@ export function useApp() {
     });
   };
 
-  /** -------------------- CRUD & CLIPBOARD -------------------- */
+  /** -------------------- CRUD -------------------- */
   const handleCreate = () => {
     const baseName = "Nová tabulka";
     let name = baseName;
@@ -197,6 +197,45 @@ export function useApp() {
 
   /** -------------------- CURRENT TABLE -------------------- */
   const currentTable = tables.find(t => t.id === currentId) || null;
+
+  /** -------------------- PASTE ANY TEXT -------------------- */
+  const handlePasteText = useCallback(async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text) return;
+
+      const lines = text.trim().split(/\r?\n/);
+      if (lines.length === 0) return;
+
+      const rows = lines.map(line => line.split(/\t|,/)); // tabulátor nebo čárka
+      const colCount = Math.max(...rows.map(r => r.length));
+
+      const columns = Array.from({ length: colCount }, (_, i) => `col${i + 1}`);
+
+      const newTable: TableData = {
+        id: "tmp_" + uuid(),
+        name: "Clipboard tabulka",
+        columns,
+        rows
+      };
+
+      handlePaste(newTable);
+    } catch (err) {
+      console.error("Nepodařilo se vložit obsah clipboardu:", err);
+    }
+  }, [handlePaste]);
+
+  /** -------------------- PASTE SHORTCUT -------------------- */
+  useEffect(() => {
+    const listener = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "v") {
+        e.preventDefault();
+        handlePasteText();
+      }
+    };
+    window.addEventListener("keydown", listener);
+    return () => window.removeEventListener("keydown", listener);
+  }, [handlePasteText]);
 
   return {
     tables,
