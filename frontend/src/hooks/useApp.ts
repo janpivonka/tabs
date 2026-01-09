@@ -16,6 +16,7 @@ export function useApp() {
 
   const currentTable = tables.find(t => t.id === currentId) || null;
 
+  /** -------------------- CRUD -------------------- */
   function handleCreate() {
     const baseName = "Nová tabulka";
     let name = baseName;
@@ -43,8 +44,15 @@ export function useApp() {
   function handleRename(id: string, newName: string) {
     const table = tables.find(t => t.id === id);
     if (!table) return;
-    pushHistory(table, "rename", `Přejmenování tabulky na "${newName}"`);
-    updateTables(tables.map(t => t.id === id ? { ...t, name: newName } : t));
+
+    // vytvoříme snapshot s novým názvem
+    const updatedTable = { ...table, name: newName };
+
+    // pushujeme snapshot již s novým názvem
+    pushHistory(updatedTable, "rename", `Přejmenování tabulky na "${newName}"`);
+
+    // aktualizujeme tabulky
+    updateTables(tables.map(t => t.id === id ? updatedTable : t));
   }
 
   function handleChangeTable(updated: TableData, description?: string) {
