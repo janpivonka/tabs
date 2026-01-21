@@ -17,7 +17,10 @@ app.get("/health", (_req, res) =>
 
 app.use(errorHandler);
 
-const PORT = 4000;
-app.listen(PORT, () => {
-  console.log(`Backend běží na http://localhost:${PORT}`);
+// Railway přiděluje port dynamicky, pokud není k dispozici, použije se 4000
+const PORT = process.env.PORT || 4000;
+
+// Host '0.0.0.0' je nutný pro přístup z vnějšího světa v Docker/Cloud prostředí
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Backend běží na portu ${PORT}`);
 });

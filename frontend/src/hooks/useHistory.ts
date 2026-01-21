@@ -15,18 +15,30 @@ export function useHistory() {
   const [history, setHistory] = useState<TableAction[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
 
-  // ref jen pro synchronní přístup v undo/redo
   const historyRef = useRef<TableAction[]>([]);
   const indexRef = useRef(-1);
 
   useEffect(() => { historyRef.current = history; }, [history]);
   useEffect(() => { indexRef.current = historyIndex; }, [historyIndex]);
 
-  /** ---------- init z localStorage ---------- */
+  /** ---------- init z localStorage s validací ---------- */
   useEffect(() => {
-    const raw = localStorage.getItem("peony_history");
-    const stored: TableAction[] =
-      raw && raw !== "undefined" ? JSON.parse(raw) : [];
+    let stored: TableAction[] = [];
+    try {
+      const raw = localStorage.getItem("peony_history");
+      if (raw && raw !== "undefined") {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          // filtrujeme jen validní akce
+          stored = parsed.filter(
+            a => a?.tableId && a?.snapshot && typeof a?.type === "string"
+          );
+        }
+      }
+    } catch (e) {
+      console.warn("Nepodařilo se načíst historii z localStorage, fallback na prázdnou", e);
+      stored = [];
+    }
 
     setHistory(stored);
     historyRef.current = stored;
@@ -41,9 +53,8 @@ export function useHistory() {
 
   const findPreviousSnapshot = (tableId: string, fromIndex: number): TableData | null => {
     for (let i = fromIndex - 1; i >= 0; i--) {
-      if (historyRef.current[i].tableId === tableId) {
-        return historyRef.current[i].snapshot;
-      }
+      const h = historyRef.current[i];
+      if (h?.tableId === tableId && h?.snapshot) return h.snapshot;
     }
     return null;
   };
@@ -56,6 +67,38 @@ export function useHistory() {
       return copy;
     }
     return [snapshot, ...tables];
+  };
+
+  /** ---------- core reducer ---------- */
+  const applyAction = (
+    tables: TableData[],
+    action: TableAction,
+    index: number,
+    mode: "undo" | "redo"
+  ): TableData[] => {
+    if (!action || !action.snapshot) return tables;
+
+    switch (action.type) {
+      case "row_add":
+        return mode === "undo"
+          ? tables.filter(t => t.id !== action.tableId)
+          : [action.snapshot, ...tables];
+
+      case "row_delete":
+        return mode === "undo"
+          ? [action.snapshot, ...tables]
+          : tables.filter(t => t.id !== action.tableId);
+
+      case "cell":
+      case "rename": {
+        if (mode === "redo") return applySnapshot(tables, action.snapshot);
+        const prev = findPreviousSnapshot(action.tableId, index);
+        return prev ? applySnapshot(tables, prev) : tables;
+      }
+
+      default:
+        return tables;
+    }
   };
 
   /** ---------- public API ---------- */
@@ -73,11 +116,7 @@ export function useHistory() {
       snapshot: clone(table),
     };
 
-    const next = [
-      ...historyRef.current.slice(0, indexRef.current + 1),
-      action,
-    ];
-
+    const next = [...historyRef.current.slice(0, indexRef.current + 1), action];
     const nextIndex = next.length - 1;
 
     setHistory(next);
@@ -85,34 +124,10 @@ export function useHistory() {
     historyRef.current = next;
     indexRef.current = nextIndex;
 
-    localStorage.setItem("peony_history", JSON.stringify(next));
-  };
-
-  const applyAction = (
-    tables: TableData[],
-    action: TableAction,
-    index: number,
-    mode: "undo" | "redo"
-  ): TableData[] => {
-    switch (action.type) {
-      case "row_add":
-        return mode === "undo"
-          ? tables.filter(t => t.id !== action.tableId)
-          : [action.snapshot, ...tables];
-
-      case "row_delete":
-        return mode === "undo"
-          ? [action.snapshot, ...tables]
-          : tables.filter(t => t.id !== action.tableId);
-
-      case "cell":
-      case "rename": {
-        if (mode === "redo") {
-          return applySnapshot(tables, action.snapshot);
-        }
-        const prev = findPreviousSnapshot(action.tableId, index);
-        return prev ? applySnapshot(tables, prev) : tables;
-      }
+    try {
+      localStorage.setItem("peony_history", JSON.stringify(next));
+    } catch (e) {
+      console.warn("Nepodařilo se uložit historii do localStorage", e);
     }
   };
 
@@ -122,10 +137,9 @@ export function useHistory() {
   ) => {
     setHistoryIndex(i => {
       if (i < 0) return i;
-
       const action = historyRef.current[i];
+      if (!action) return i;
       setTables(t => applyAction(t, action, i, "undo"));
-
       indexRef.current = i - 1;
       setCurrentId(action.tableId);
       return i - 1;
@@ -139,10 +153,9 @@ export function useHistory() {
     setHistoryIndex(i => {
       const next = i + 1;
       if (next >= historyRef.current.length) return i;
-
       const action = historyRef.current[next];
+      if (!action) return i;
       setTables(t => applyAction(t, action, next, "redo"));
-
       indexRef.current = next;
       setCurrentId(action.tableId);
       return next;
