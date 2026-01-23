@@ -1,4 +1,3 @@
-// src/components/TableEditor.tsx
 import type { Table } from "../../domain/table";
 import { useTableEditor } from "../../hooks/useTableEditor";
 
@@ -27,56 +26,91 @@ export function TableEditor({
   } = useTableEditor(table, onUpdate);
 
   return (
-    <div className="p-4 w-full">
-      <div className="mb-4 flex gap-2 flex-wrap">
-        <button onClick={() => addRow("above")} className="px-3 py-1 bg-gray-200 rounded">+ řádek nad</button>
-        <button onClick={() => addRow("below")} className="px-3 py-1 bg-gray-200 rounded">+ řádek pod</button>
-        <button onClick={() => addColumn("before")} className="px-3 py-1 bg-gray-200 rounded">+ sloupec před</button>
-        <button onClick={() => addColumn("after")} className="px-3 py-1 bg-gray-200 rounded">+ sloupec za</button>
-        <button onClick={deleteRow} className="px-3 py-1 bg-red-300 rounded">Smazat řádek</button>
-        <button onClick={deleteColumn} className="px-3 py-1 bg-red-300 rounded">Smazat sloupec</button>
-        <button onClick={onSave} className="px-3 py-1 bg-green-500 text-white rounded">💾 Uložit tabulku</button>
-        <button onClick={onExport} className="px-3 py-1 bg-blue-500 text-white rounded">📤 Export tabulky</button>
+    <div className="p-6 w-full bg-white flex-1 overflow-auto">
+      {/* TOOLBAR */}
+      <div className="mb-6 flex gap-3 flex-wrap items-center bg-slate-50 p-2 rounded-xl border border-slate-200">
+        <div className="flex gap-1 pr-3 border-r border-slate-200">
+          <button onClick={() => addRow("above")} className="px-3 py-1.5 hover:bg-white hover:shadow-sm rounded-lg text-xs font-bold text-slate-600 transition-all border border-transparent hover:border-slate-200">
+            + Row Above
+          </button>
+          <button onClick={() => addRow("below")} className="px-3 py-1.5 hover:bg-white hover:shadow-sm rounded-lg text-xs font-bold text-slate-600 transition-all border border-transparent hover:border-slate-200">
+            + Row Below
+          </button>
+        </div>
+
+        <div className="flex gap-1 pr-3 border-r border-slate-200">
+          <button onClick={() => addColumn("before")} className="px-3 py-1.5 hover:bg-white hover:shadow-sm rounded-lg text-xs font-bold text-slate-600 transition-all border border-transparent hover:border-slate-200">
+            + Col Left
+          </button>
+          <button onClick={() => addColumn("after")} className="px-3 py-1.5 hover:bg-white hover:shadow-sm rounded-lg text-xs font-bold text-slate-600 transition-all border border-transparent hover:border-slate-200">
+            + Col Right
+          </button>
+        </div>
+
+        <div className="flex gap-1 pr-3 border-r border-slate-200">
+          <button onClick={deleteRow} className="px-3 py-1.5 hover:bg-red-50 text-red-600 rounded-lg text-xs font-bold transition-all border border-transparent hover:border-red-100">
+            Del Row
+          </button>
+          <button onClick={deleteColumn} className="px-3 py-1.5 hover:bg-red-50 text-red-600 rounded-lg text-xs font-bold transition-all border border-transparent hover:border-red-100">
+            Del Col
+          </button>
+        </div>
+
+        <div className="flex gap-2 ml-auto">
+          <button onClick={onExport} className="px-4 py-1.5 bg-white text-slate-600 border border-slate-200 rounded-lg text-xs font-bold hover:bg-slate-50 transition-all shadow-sm">
+            Export
+          </button>
+          <button onClick={onSave} className="px-4 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-all shadow-md active:scale-95 flex items-center gap-2">
+            <span>💾</span> Save Table
+          </button>
+        </div>
       </div>
 
-      <table className="border-collapse">
-        <thead>
-          <tr>
-            {table.columns.map((col, i) => (
-              <th key={i} className="border px-3 py-2 bg-gray-100">
-                <input
-                  value={col}
-                  onChange={e => updateColumnName(i, e.target.value)}
-                  className="w-full bg-transparent outline-none"
-                />
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {table.rows.map((row, rIdx) => (
-            <tr key={rIdx}>
-              {row.map((cell, cIdx) => (
-                <td
-                  key={cIdx}
-                  className={`border px-2 py-1 ${selectedCell?.row === rIdx && selectedCell?.col === cIdx ? "bg-yellow-200" : ""}`}
-                  onClick={() => setSelectedCell({ row: rIdx, col: cIdx })}
-                >
-                  {cIdx === 0 ? (
-                    <span className="text-gray-600">{cell}</span>
-                  ) : (
-                    <input
-                      value={cell}
-                      onChange={e => updateCell(rIdx, cIdx, e.target.value)}
-                      className="w-full bg-transparent outline-none"
-                    />
-                  )}
-                </td>
+      {/* TABLE */}
+      <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="bg-slate-50 border-b border-slate-200">
+              {table.columns.map((col, i) => (
+                <th key={i} className="border-r border-slate-200 last:border-0 p-0">
+                  <input
+                    value={col}
+                    onChange={e => updateColumnName(i, e.target.value)}
+                    className="w-full bg-transparent px-4 py-3 outline-none text-[11px] font-black uppercase tracking-widest text-slate-500 focus:text-indigo-600 transition-colors"
+                  />
+                </th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {table.rows.map((row, rIdx) => (
+              <tr key={rIdx} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/30 transition-colors">
+                {row.map((cell, cIdx) => (
+                  <td
+                    key={cIdx}
+                    className={`border-r border-slate-100 last:border-0 p-0 transition-all ${
+                      selectedCell?.row === rIdx && selectedCell?.col === cIdx ? "bg-indigo-50 ring-1 ring-inset ring-indigo-200" : ""
+                    }`}
+                    onClick={() => setSelectedCell({ row: rIdx, col: cIdx })}
+                  >
+                    {cIdx === 0 ? (
+                      <div className="px-4 py-2 text-[10px] font-mono text-slate-400 select-none">
+                        {cell}
+                      </div>
+                    ) : (
+                      <input
+                        value={cell}
+                        onChange={e => updateCell(rIdx, cIdx, e.target.value)}
+                        className="w-full bg-transparent px-4 py-2 outline-none text-sm text-slate-700 focus:text-indigo-700"
+                      />
+                    )}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
