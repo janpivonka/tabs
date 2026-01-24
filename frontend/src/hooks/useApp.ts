@@ -1,91 +1,243 @@
 import { useState, useRef } from "react";
+import { v4 as uuid } from "uuid";
+import type { TableData } from "../lib/storage";
+
 import { useTables } from "./useTables";
 import { useHistory } from "./useHistory";
 import { useClipboardPaste } from "./useClipboardPaste";
-import { v4 as uuid } from "uuid";
-import type { TableData } from "../lib/storage";
+
+/** -------------------- UTIL -------------------- */
+
+const clone = <T,>(v: T): T => structuredClone(v);
+
+/** -------------------- HOOK -------------------- */
 
 export function useApp() {
   const { tables, updateTables } = useTables();
   const [currentId, setCurrentId] = useState<string | null>(null);
-  const { history, historyIndex, pushHistory, undo, redo } = useHistory();
-  const { handlePasteText } = useClipboardPaste(handlePaste);
+
+  const {
+    history,
+    historyIndex,
+    pushHistory,
+    undo,
+    redo,
+    updateTableIdInHistory,
+  } = useHistory();
 
   const [historyVisible, setHistoryVisible] = useState(false);
   const historyContainerRef = useRef<HTMLDivElement | null>(null);
 
   const currentTable = tables.find(t => t.id === currentId) || null;
 
-  /** -------------------- CRUD -------------------- */
-  function handleCreate() {
-    const baseName = "Nová tabulka";
-    let name = baseName;
-    let counter = 2;
-    while (tables.find(t => t.name.toLowerCase() === name.toLowerCase())) name = `${baseName}_${counter++}`;
+  /** -------------------- CLIPBOARD -------------------- */
 
-    const newTable: TableData = {
-      id: "tmp_" + uuid(),
-      name,
-      columns: ["ID", "name", "col2", "col3"],
-      rows: Array(4).fill(null).map((_, r) => ["1", "", "", ""].map((c, i) => i === 0 ? String(r + 1) : c)),
+  const { handlePasteText } = useClipboardPaste(handlePaste);
+
+  /** -------------------- DB SYNC -------------------- */
+
+  const syncWithState = (
+    syncedTables: TableData[],
+    originalRequestIds: string[]
+  ) => {
+    let next = [...tables];
+
+    syncedTables.forEach((saved, i) => {
+      const reqId = originalRequestIds[i];
+
+      if (reqId !== saved.id) {
+        updateTableIdInHistory(reqId, saved.id);
+      }
+
+      if (reqId.startsWith("clone:")) {
+        next = next.filter(t => t.id !== reqId);
+      }
+
+      const idx = next.findIndex(t => t.id === saved.id);
+      if (idx > -1) next[idx] = saved;
+      else next.push(saved);
+    });
+
+    updateTables(next);
+
+    if (syncedTables.length === 1) {
+      setCurrentId(syncedTables[0].id);
+    }
+  };
+
+  async function handleSaveTable() {
+    if (!currentTable) return;
+
+    const dataToSend = {
+      ...currentTable,
+      id: currentTable.id.replace("clone:", ""),
+      name: currentTable.name.replace("_clone_db", ""),
     };
 
-    pushHistory(newTable, "row_add", `Vytvoření nové tabulky "${name}"`);
-    updateTables([newTable, ...tables]);
-    setCurrentId(newTable.id);
+    try {
+      const res = await fetch("http://localhost:4000/tables/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tables: [dataToSend] }),
+      });
+
+      const result = await res.json();
+      if (result.success) {
+        syncWithState(result.data, [currentTable.id]);
+        alert(`✅ Tabulka "${dataToSend.name}" byla uložena.`);
+      }
+    } catch {
+      alert("❌ Chyba při ukládání tabulky.");
+    }
+  }
+
+  async function handleSaveAll() {
+    const ids = tables.map(t => t.id);
+
+    const payload = tables.map(t => ({
+      ...t,
+      id: t.id.replace("clone:", ""),
+      name: t.name.replace("_clone_db", ""),
+    }));
+
+    try {
+      const res = await fetch("http://localhost:4000/tables/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tables: payload }),
+      });
+
+      const result = await res.json();
+      if (result.success) {
+        syncWithState(result.data, ids);
+        alert("✅ Všechny změny synchronizovány.");
+      }
+    } catch {
+      alert("❌ Hromadná synchronizace selhala.");
+    }
+  }
+
+  /** -------------------- CRUD -------------------- */
+
+  function handleCreate() {
+    const base = "Nová tabulka";
+    let name = base;
+    let i = 2;
+
+    while (tables.some(t => t.name.toLowerCase() === name.toLowerCase())) {
+      name = `${base} ${i++}`;
+    }
+
+    const table: TableData = {
+      id: "tmp_" + uuid(),
+      name,
+      columns: ["ID", "Název", "Vlastnost 1", "Vlastnost 2"],
+      rows: [
+        ["1", "Příklad dat", "", ""],
+        ["2", "", "", ""],
+      ],
+    };
+
+    pushHistory({
+      tableId: table.id,
+      type: "row_add",
+      description: `Vytvoření tabulky "${name}"`,
+      before: null,
+      after: clone(table),
+    });
+
+    updateTables([table, ...tables]);
+    setCurrentId(table.id);
   }
 
   function handlePaste(table: TableData) {
-    pushHistory(table, "row_add", `Vložení tabulky "${table.name}"`);
+    pushHistory({
+      tableId: table.id,
+      type: "row_add",
+      description: `Vložení tabulky "${table.name}"`,
+      before: null,
+      after: clone(table),
+    });
+
     updateTables([table, ...tables]);
     setCurrentId(table.id);
   }
 
   function handleRename(id: string, newName: string) {
-    const table = tables.find(t => t.id === id);
-    if (!table) return;
+    const prev = tables.find(t => t.id === id);
+    if (!prev) return;
 
-    // vytvoříme snapshot s novým názvem
-    const updatedTable = { ...table, name: newName };
+    const next = { ...prev, name: newName };
 
-    // pushujeme snapshot již s novým názvem
-    pushHistory(updatedTable, "rename", `Přejmenování tabulky na "${newName}"`);
+    pushHistory({
+      tableId: id,
+      type: "rename",
+      description: `Přejmenování na "${newName}"`,
+      before: clone(prev),
+      after: clone(next),
+    });
 
-    // aktualizujeme tabulky
-    updateTables(tables.map(t => t.id === id ? updatedTable : t));
+    updateTables(tables.map(t => (t.id === id ? next : t)));
   }
 
   function handleChangeTable(updated: TableData, description?: string) {
-    const original = tables.find(t => t.id === updated.id);
-    if (original && description) pushHistory(updated, "cell", description);
-    updateTables(tables.map(t => t.id === updated.id ? updated : t));
+    if (!description) return;
+
+    const prev = tables.find(t => t.id === updated.id);
+    if (!prev) return;
+
+    pushHistory({
+      tableId: updated.id,
+      type: "cell",
+      description,
+      before: clone(prev),
+      after: clone(updated),
+    });
+
+    updateTables(tables.map(t => (t.id === updated.id ? updated : t)));
   }
 
   function handleDelete(id: string) {
-    const table = tables.find(t => t.id === id);
-    if (!table) return;
-    pushHistory(table, "row_delete", `Smazání tabulky "${table.name}"`);
+    const prev = tables.find(t => t.id === id);
+    if (!prev) return;
+
+    pushHistory({
+      tableId: id,
+      type: "row_delete",
+      description: `Smazání tabulky "${prev.name}"`,
+      before: clone(prev),
+      after: null,
+    });
+
     updateTables(tables.filter(t => t.id !== id));
     if (currentId === id) setCurrentId(null);
   }
+
+  /** -------------------- API -------------------- */
 
   return {
     tables,
     currentId,
     setCurrentId,
     currentTable,
+
     history,
     historyIndex,
     historyVisible,
     setHistoryVisible,
     historyContainerRef,
+
     undo: () => undo(updateTables, setCurrentId),
     redo: () => redo(updateTables, setCurrentId),
+
     handleCreate,
     handlePaste,
     handleRename,
     handleChangeTable,
     handleDelete,
-    handlePasteText
+
+    handlePasteText,
+    handleSaveAll,
+    handleSaveTable,
   };
 }

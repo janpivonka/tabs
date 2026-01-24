@@ -5,6 +5,9 @@ const router = Router();
 
 router.get("/", controller.getAllTables);
 router.post("/", controller.createTable);
+// NOVINKA: Hromadná synchronizace
+router.post("/sync", controller.syncTables);
+
 router.put("/:id", controller.updateTable);
 router.delete("/:id", controller.deleteTable);
 

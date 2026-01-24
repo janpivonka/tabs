@@ -1,4 +1,3 @@
-// src/hooks/useSidebar.ts
 import { useState, useMemo } from "react";
 import type { Table } from "../domain/table";
 
@@ -16,30 +15,29 @@ interface UseSidebarProps {
 export function useSidebar(props: UseSidebarProps) {
   const { tables, currentId, onSelect, onRename, onDelete, onPaste } = props;
 
-  // ===== Stav =====
   const [search, setSearch] = useState("");
   const [renameId, setRenameId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<Table | null>(null);
 
-  // ===== Filtrace =====
+  // DB tabulky: Nemají tmp_ a nezačínají clone:
   const dbTables = useMemo(
     () =>
       tables.filter(
-        t => !t.id.startsWith("tmp_") && t.name.toLowerCase().includes(search.toLowerCase())
+        t => !t.id.startsWith("tmp_") && !t.id.startsWith("clone:") && t.name.toLowerCase().includes(search.toLowerCase())
       ),
     [tables, search]
   );
 
+  // Lokální tabulky: Mají tmp_ NEBO začínají clone:
   const localTables = useMemo(
     () =>
       tables.filter(
-        t => t.id.startsWith("tmp_") && t.name.toLowerCase().includes(search.toLowerCase())
+        t => (t.id.startsWith("tmp_") || t.id.startsWith("clone:")) && t.name.toLowerCase().includes(search.toLowerCase())
       ),
     [tables, search]
   );
 
-  // ===== Akce =====
   const startRename = (t: Table) => {
     setRenameId(t.id);
     setRenameValue(t.name);
@@ -56,8 +54,6 @@ export function useSidebar(props: UseSidebarProps) {
     try {
       const text = await navigator.clipboard.readText();
       if (!text) return;
-
-      // JSON paste
       try {
         const parsed = JSON.parse(text);
         if (parsed && Array.isArray(parsed.columns) && Array.isArray(parsed.rows)) {
@@ -67,37 +63,28 @@ export function useSidebar(props: UseSidebarProps) {
           return;
         }
       } catch {}
-
-      // CSV / TSV / pipe
       const lines = text.trim().split("\n").filter(l => l.trim());
-      if (lines.length < 2) throw new Error("Neplatný formát tabulky.");
-
-      const splitRow = (row: string) =>
-        row.includes("|") ? row.split("|").map(c => c.trim()) :
-        row.includes(",") ? row.split(",").map(c => c.trim()) :
-        row.split("\t").map(c => c.trim());
-
-      const columns = splitRow(lines[0]);
-      const rows = lines.slice(1).map(splitRow);
-
+      if (lines.length < 2) throw new Error("Neplatný formát");
+      const splitRow = (row: string) => row.includes("|") ? row.split("|").map(c => c.trim()) : row.includes(",") ? row.split(",").map(c => c.trim()) : row.split("\t").map(c => c.trim());
       onPaste({
         id: "tmp_" + crypto.randomUUID(),
         name: "Imported Table",
-        columns,
-        rows,
+        columns: splitRow(lines[0]),
+        rows: lines.slice(1).map(splitRow),
       });
-    } catch {
-      alert("❌ Chyba: Nepodařilo se rozeznat obsah clipboardu");
-    }
+    } catch { alert("❌ Chyba clipboardu"); }
   };
 
   const handleDbClick = (t: Table) => {
-    const existingClone = localTables.find(lt => lt.name.startsWith(`${t.name}_clone_db`));
-    if (existingClone) onSelect(existingClone.id);
-    else {
+    const cloneId = `clone:${t.id}`;
+    const existingClone = localTables.find(lt => lt.id === cloneId);
+    
+    if (existingClone) {
+      onSelect(existingClone.id);
+    } else {
       const cloneTable: Table = {
         ...t,
-        id: "tmp_" + crypto.randomUUID(),
+        id: cloneId, // UNIKÁTNÍ ID PRO FRONTEND
         name: `${t.name}_clone_db`,
       };
       onPaste(cloneTable);
@@ -105,19 +92,5 @@ export function useSidebar(props: UseSidebarProps) {
     }
   };
 
-  return {
-    search,
-    setSearch,
-    renameId,
-    renameValue,
-    setRenameValue,
-    commitRename,
-    startRename,
-    deleteTarget,
-    setDeleteTarget,
-    handlePaste,
-    dbTables,
-    localTables,
-    handleDbClick,
-  };
+  return { search, setSearch, renameId, renameValue, setRenameValue, commitRename, startRename, deleteTarget, setDeleteTarget, handlePaste, dbTables, localTables, handleDbClick };
 }

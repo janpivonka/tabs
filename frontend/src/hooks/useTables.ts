@@ -8,21 +8,34 @@ export function useTables() {
 
   useEffect(() => {
     const load = async () => {
+      // 1. Načtení z localStorage (tady jsou i ty smazané, které tam zbyly)
       const localRaw = localStorage.getItem("peony_tables");
       const local: TableData[] = localRaw && localRaw !== "undefined" ? JSON.parse(localRaw) : [];
 
       try {
+        // 2. Načtení z DB (ZDE JE PRAVDA - co tu není, neexistuje)
         const res = await fetch(API_URL);
-        const dbTablesRaw: any[] = await res.json();
-        const dbTables = dbTablesRaw
-          .map(d => d.data ? { ...d.data, id: d.id } : null)
-          .filter(Boolean) as TableData[];
+        const dbTables: TableData[] = await res.json();
 
-        const merged = [...local];
-        dbTables.forEach(dbT => { if (!merged.find(t => t.id === dbT.id)) merged.push(dbT); });
+        // 3. NOVÉ MERGOVÁNÍ
+        // Začneme čistě s tím, co je v DB
+        const merged = [...dbTables];
+
+        // Z localStorage přidáme POUZE tabulky, které jsou dočasné (tmp_)
+        // Tyto tabulky v DB ještě nejsou, takže je chceme zachovat.
+        const localTmpTables = local.filter(t => String(t.id).startsWith("tmp_"));
+
+        localTmpTables.forEach(tmpT => {
+          // Pro jistotu zkontrolujeme, zda už tam není (neměla by být)
+          if (!merged.find(t => t.id === tmpT.id)) {
+            merged.push(tmpT);
+          }
+        });
 
         setTables(merged);
-      } catch {
+        saveLocal(merged); // Tímto přepíšeme localStorage a "duchové" zmizí
+      } catch (err) {
+        console.error("Fetch failed, using local backup", err);
         setTables(local);
       }
     };
@@ -30,7 +43,7 @@ export function useTables() {
     load();
   }, []);
 
-  const saveLocal = (tables: TableData[]) => localStorage.setItem("peony_tables", JSON.stringify(tables));
+  const saveLocal = (ts: TableData[]) => localStorage.setItem("peony_tables", JSON.stringify(ts));
 
   const updateTables = (newTables: TableData[]) => {
     setTables(newTables);

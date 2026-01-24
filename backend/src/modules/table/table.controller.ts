@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { tableService } from "./table.service.js";
-import { validateTableInput } from "./table.validator.js";
+import { validateTableInput, validateSyncInput } from "./table.validator.js";
 
 export const getAllTables = async (
   _req: Request,
@@ -50,6 +50,21 @@ export const deleteTable = async (
   try {
     await tableService.delete(req.params.id);
     res.json({ success: true });
+  } catch (e) {
+    next(e);
+  }
+};
+
+// NOVÝ CONTROLLER PRO SYNC
+export const syncTables = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    validateSyncInput(req.body);
+    const result = await tableService.sync(req.body.tables);
+    res.json({ success: true, data: result });
   } catch (e) {
     next(e);
   }

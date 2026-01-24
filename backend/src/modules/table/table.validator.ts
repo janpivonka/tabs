@@ -8,3 +8,10 @@ export const validateTableInput = (data: any) => {
     throw new AppError("Table name is required", 400);
   }
 };
+
+export const validateSyncInput = (data: any) => {
+  if (!data || !Array.isArray(data.tables)) {
+    throw new AppError("Invalid sync data: 'tables' array is required", 400);
+  }
+  data.tables.forEach((t: any) => validateTableInput(t));
+};
