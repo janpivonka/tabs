@@ -1,43 +1,45 @@
-import { useCallback, useEffect } from "react";
-import { v4 as uuid } from "uuid";
+// src/hooks/useClipboardPaste.ts
+import { useCallback } from "react";
 import type { TableData } from "../lib/storage";
 
-export function useClipboardPaste(handlePaste: (table: TableData) => void) {
-  const handlePasteText = useCallback(async () => {
-    try {
-      const text = await navigator.clipboard.readText();
+export function useClipboardPaste(onPaste: (table: TableData) => void) {
+  const handlePasteText = useCallback(
+    (e: ClipboardEvent) => {
+      e.preventDefault();
+      const text = e.clipboardData?.getData("text/plain");
       if (!text) return;
 
-      const lines = text.trim().split(/\r?\n/);
-      if (!lines.length) return;
+      // Rozdělíme řádky a buňky
+      const rawRows = text
+        .split(/\r?\n/)
+        .map(r => r.split("\t"))
+        .filter(r => r.some(cell => cell.trim() !== ""));
 
-      const rows = lines.map(line => line.split(/\t|,/));
-      const colCount = Math.max(...rows.map(r => r.length));
-      const columns = Array.from({ length: colCount }, (_, i) => `col${i + 1}`);
+      if (rawRows.length === 0) return;
 
-      const newTable: TableData = {
-        id: "tmp_" + uuid(),
-        name: "Clipboard tabulka",
-        columns,
-        rows
-      };
+      const columns = rawRows[0]; // první řádek jako názvy sloupců
+      const rows = rawRows.slice(1); // zbytek jako data
 
-      handlePaste(newTable);
-    } catch (err) {
-      console.error("Nepodařilo se vložit obsah clipboardu:", err);
-    }
-  }, [handlePaste]);
+      // Přidání ID sloupce
+      const finalColumns = ["ID", ...columns];
+      const finalRows = rows.map((r, i) => {
+        const row: string[] = [];
+        row[0] = String(i + 1); // ID vždy první
+        for (let j = 1; j < finalColumns.length; j++) {
+          row[j] = r[j - 1] ?? "";
+        }
+        return row;
+      });
 
-  useEffect(() => {
-    const listener = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "v") {
-        e.preventDefault();
-        handlePasteText();
-      }
-    };
-    window.addEventListener("keydown", listener);
-    return () => window.removeEventListener("keydown", listener);
-  }, [handlePasteText]);
+      onPaste({
+        id: "tmp_" + crypto.randomUUID(),
+        name: "Vložená tabulka",
+        columns: finalColumns,
+        rows: finalRows,
+      });
+    },
+    [onPaste]
+  );
 
   return { handlePasteText };
 }

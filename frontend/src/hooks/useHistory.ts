@@ -1,12 +1,9 @@
+// useHistory.ts
 import { useState, useRef, useEffect } from "react";
 import { v4 as uuid } from "uuid";
 import type { TableData } from "../lib/storage";
 
-export type HistoryActionType =
-  | "cell"
-  | "row_add"
-  | "row_delete"
-  | "rename";
+export type HistoryActionType = "cell" | "row_add" | "row_delete" | "rename";
 
 export interface TableAction {
   id: string;
@@ -29,21 +26,14 @@ export function useHistory() {
   const historyRef = useRef<TableAction[]>([]);
   const indexRef = useRef(-1);
 
-  useEffect(() => {
-    historyRef.current = history;
-  }, [history]);
-
-  useEffect(() => {
-    indexRef.current = historyIndex;
-  }, [historyIndex]);
+  useEffect(() => { historyRef.current = history; }, [history]);
+  useEffect(() => { indexRef.current = historyIndex; }, [historyIndex]);
 
   /** ---------- INIT Z LOCAL STORAGE ---------- */
-
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return;
-
       const parsed = JSON.parse(raw);
       if (!Array.isArray(parsed)) return;
 
@@ -60,7 +50,6 @@ export function useHistory() {
   };
 
   /** ---------- PUSH AKCE ---------- */
-
   const pushHistory = (action: Omit<TableAction, "id" | "timestamp">) => {
     const entry: TableAction = {
       ...action,
@@ -68,10 +57,7 @@ export function useHistory() {
       timestamp: Date.now(),
     };
 
-    const next = [
-      ...historyRef.current.slice(0, indexRef.current + 1),
-      entry,
-    ];
+    const next = [...historyRef.current.slice(0, indexRef.current + 1), entry];
 
     setHistory(next);
     setHistoryIndex(next.length - 1);
@@ -81,17 +67,12 @@ export function useHistory() {
   };
 
   /** ---------- UPDATE ID (clone → db) ---------- */
-
   const updateTableIdInHistory = (oldId: string, newId: string) => {
     const updated = historyRef.current.map(a => ({
       ...a,
       tableId: a.tableId === oldId ? newId : a.tableId,
-      before: a.before && a.before.id === oldId
-        ? { ...a.before, id: newId }
-        : a.before,
-      after: a.after && a.after.id === oldId
-        ? { ...a.after, id: newId }
-        : a.after,
+      before: a.before && a.before.id === oldId ? { ...a.before, id: newId } : a.before,
+      after: a.after && a.after.id === oldId ? { ...a.after, id: newId } : a.after,
     }));
 
     setHistory(updated);
@@ -99,9 +80,8 @@ export function useHistory() {
   };
 
   /** ---------- UNDO ---------- */
-
   const undo = (
-    updateTables: (fn: (p: TableData[]) => TableData[]) => void,
+    updateTables: (fn: (prev: TableData[]) => TableData[]) => void,
     setCurrentId: (id: string | null) => void
   ) => {
     const i = indexRef.current;
@@ -110,12 +90,12 @@ export function useHistory() {
     const action = historyRef.current[i];
     if (!action) return;
 
-    setCurrentId(null);
-
     updateTables(prev => {
       if (!action.before) {
-        // např. undo vytvoření tabulky
-        return prev.filter(t => t.id !== action.tableId);
+        // Undo vytvoření tabulky
+        const next = prev.filter(t => t.id !== action.tableId);
+        setCurrentId(next[0]?.id || null);
+        return next;
       }
 
       const exists = prev.some(t => t.id === action.tableId);
@@ -123,22 +103,18 @@ export function useHistory() {
         ? prev.map(t => (t.id === action.tableId ? clone(action.before!) : t))
         : [clone(action.before!), ...prev];
 
+      setCurrentId(action.before!.id);
       return next;
     });
 
     const nextIdx = i - 1;
     setHistoryIndex(nextIdx);
     indexRef.current = nextIdx;
-
-    if (action.before) {
-      setTimeout(() => setCurrentId(action.before!.id), 10);
-    }
   };
 
   /** ---------- REDO ---------- */
-
   const redo = (
-    updateTables: (fn: (p: TableData[]) => TableData[]) => void,
+    updateTables: (fn: (prev: TableData[]) => TableData[]) => void,
     setCurrentId: (id: string | null) => void
   ) => {
     const nextIdx = indexRef.current + 1;
@@ -147,12 +123,12 @@ export function useHistory() {
     const action = historyRef.current[nextIdx];
     if (!action) return;
 
-    setCurrentId(null);
-
     updateTables(prev => {
       if (!action.after) {
-        // např. redo smazání
-        return prev.filter(t => t.id !== action.tableId);
+        // Redo smazání tabulky
+        const next = prev.filter(t => t.id !== action.tableId);
+        setCurrentId(next[0]?.id || null);
+        return next;
       }
 
       const exists = prev.some(t => t.id === action.tableId);
@@ -160,15 +136,12 @@ export function useHistory() {
         ? prev.map(t => (t.id === action.tableId ? clone(action.after!) : t))
         : [clone(action.after!), ...prev];
 
+      setCurrentId(action.after!.id);
       return next;
     });
 
     setHistoryIndex(nextIdx);
     indexRef.current = nextIdx;
-
-    if (action.after) {
-      setTimeout(() => setCurrentId(action.after!.id), 10);
-    }
   };
 
   return {

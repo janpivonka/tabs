@@ -81,7 +81,7 @@ export default function App() {
         <div className="flex-1 overflow-auto">
           {currentTable ? (
             <TableEditor
-              key={`${currentTable.id}:${historyIndex}`}
+              key={currentTable.id}
               table={currentTable}
               onUpdate={handleChangeTable}
               onSave={handleSaveTable} // Pouze pro aktuální tabulku

@@ -2,11 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import { tableService } from "./table.service.js";
 import { validateTableInput, validateSyncInput } from "./table.validator.js";
 
-export const getAllTables = async (
-  _req: Request,
-  res: Response,
-  next: NextFunction
-) => {
+export const getAllTables = async (_req: Request, res: Response, next: NextFunction) => {
   try {
     res.json(await tableService.getAll());
   } catch (e) {
@@ -14,11 +10,7 @@ export const getAllTables = async (
   }
 };
 
-export const createTable = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
+export const createTable = async (req: Request, res: Response, next: NextFunction) => {
   try {
     validateTableInput(req.body);
     const table = await tableService.create(req.body);
@@ -28,11 +20,7 @@ export const createTable = async (
   }
 };
 
-export const updateTable = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
+export const updateTable = async (req: Request, res: Response, next: NextFunction) => {
   try {
     validateTableInput(req.body);
     const table = await tableService.update(req.params.id, req.body);
@@ -42,11 +30,7 @@ export const updateTable = async (
   }
 };
 
-export const deleteTable = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
+export const deleteTable = async (req: Request, res: Response, next: NextFunction) => {
   try {
     await tableService.delete(req.params.id);
     res.json({ success: true });
@@ -55,12 +39,7 @@ export const deleteTable = async (
   }
 };
 
-// NOVÝ CONTROLLER PRO SYNC
-export const syncTables = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
+export const syncTables = async (req: Request, res: Response, next: NextFunction) => {
   try {
     validateSyncInput(req.body);
     const result = await tableService.sync(req.body.tables);

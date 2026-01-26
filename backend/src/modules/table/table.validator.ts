@@ -4,8 +4,11 @@ export const validateTableInput = (data: any) => {
   if (!data || typeof data !== "object") {
     throw new AppError("Invalid table data", 400);
   }
-  if (typeof data.name !== "string") {
+  if (!data.name || typeof data.name !== "string" || !data.name.trim()) {
     throw new AppError("Table name is required", 400);
+  }
+  if (!Array.isArray(data.columns) || !Array.isArray(data.rows)) {
+    throw new AppError("Table columns and rows must be arrays", 400);
   }
 };
 

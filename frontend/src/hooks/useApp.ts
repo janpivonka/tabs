@@ -1,3 +1,4 @@
+// src/hooks/useApp.ts
 import { useState, useRef } from "react";
 import { v4 as uuid } from "uuid";
 import type { TableData } from "../lib/storage";
@@ -7,11 +8,29 @@ import { useHistory } from "./useHistory";
 import { useClipboardPaste } from "./useClipboardPaste";
 
 /** -------------------- UTIL -------------------- */
-
 const clone = <T,>(v: T): T => structuredClone(v);
 
-/** -------------------- HOOK -------------------- */
+/**
+ * Normalize table rows to match column count and always include ID column
+ */
+function normalizeTable(table: TableData): TableData {
+  const hasId = table.columns[0] === "ID";
+  const columns = hasId ? table.columns : ["ID", ...table.columns];
 
+  const rows = table.rows.map((r, i) => {
+    const row: string[] = [];
+    row[0] = String(i + 1); // ID vždy první
+
+    for (let j = 1; j < columns.length; j++) {
+      row[j] = hasId ? r[j] ?? "" : r[j - 1] ?? "";
+    }
+    return row;
+  });
+
+  return { ...table, columns, rows };
+}
+
+/** -------------------- HOOK -------------------- */
 export function useApp() {
   const { tables, updateTables } = useTables();
   const [currentId, setCurrentId] = useState<string | null>(null);
@@ -31,94 +50,11 @@ export function useApp() {
   const currentTable = tables.find(t => t.id === currentId) || null;
 
   /** -------------------- CLIPBOARD -------------------- */
-
-  const { handlePasteText } = useClipboardPaste(handlePaste);
-
-  /** -------------------- DB SYNC -------------------- */
-
-  const syncWithState = (
-    syncedTables: TableData[],
-    originalRequestIds: string[]
-  ) => {
-    let next = [...tables];
-
-    syncedTables.forEach((saved, i) => {
-      const reqId = originalRequestIds[i];
-
-      if (reqId !== saved.id) {
-        updateTableIdInHistory(reqId, saved.id);
-      }
-
-      if (reqId.startsWith("clone:")) {
-        next = next.filter(t => t.id !== reqId);
-      }
-
-      const idx = next.findIndex(t => t.id === saved.id);
-      if (idx > -1) next[idx] = saved;
-      else next.push(saved);
-    });
-
-    updateTables(next);
-
-    if (syncedTables.length === 1) {
-      setCurrentId(syncedTables[0].id);
-    }
-  };
-
-  async function handleSaveTable() {
-    if (!currentTable) return;
-
-    const dataToSend = {
-      ...currentTable,
-      id: currentTable.id.replace("clone:", ""),
-      name: currentTable.name.replace("_clone_db", ""),
-    };
-
-    try {
-      const res = await fetch("http://localhost:4000/tables/sync", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tables: [dataToSend] }),
-      });
-
-      const result = await res.json();
-      if (result.success) {
-        syncWithState(result.data, [currentTable.id]);
-        alert(`✅ Tabulka "${dataToSend.name}" byla uložena.`);
-      }
-    } catch {
-      alert("❌ Chyba při ukládání tabulky.");
-    }
-  }
-
-  async function handleSaveAll() {
-    const ids = tables.map(t => t.id);
-
-    const payload = tables.map(t => ({
-      ...t,
-      id: t.id.replace("clone:", ""),
-      name: t.name.replace("_clone_db", ""),
-    }));
-
-    try {
-      const res = await fetch("http://localhost:4000/tables/sync", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tables: payload }),
-      });
-
-      const result = await res.json();
-      if (result.success) {
-        syncWithState(result.data, ids);
-        alert("✅ Všechny změny synchronizovány.");
-      }
-    } catch {
-      alert("❌ Hromadná synchronizace selhala.");
-    }
-  }
+  const { handlePasteText } = useClipboardPaste((table: TableData) => {
+    handlePaste(table);
+  });
 
   /** -------------------- CRUD -------------------- */
-
   function handleCreate() {
     const base = "Nová tabulka";
     let name = base;
@@ -151,16 +87,18 @@ export function useApp() {
   }
 
   function handlePaste(table: TableData) {
+    const normalized = normalizeTable(table);
+
     pushHistory({
-      tableId: table.id,
+      tableId: normalized.id,
       type: "row_add",
-      description: `Vložení tabulky "${table.name}"`,
+      description: `Vložení tabulky "${normalized.name}"`,
       before: null,
-      after: clone(table),
+      after: clone(normalized),
     });
 
-    updateTables([table, ...tables]);
-    setCurrentId(table.id);
+    updateTables([normalized, ...tables]);
+    setCurrentId(normalized.id);
   }
 
   function handleRename(id: string, newName: string) {
@@ -195,6 +133,7 @@ export function useApp() {
     });
 
     updateTables(tables.map(t => (t.id === updated.id ? updated : t)));
+    setCurrentId(updated.id);
   }
 
   function handleDelete(id: string) {
@@ -213,8 +152,70 @@ export function useApp() {
     if (currentId === id) setCurrentId(null);
   }
 
-  /** -------------------- API -------------------- */
+  /** -------------------- DB SYNC -------------------- */
+  const syncWithState = (syncedTables: TableData[], originalRequestIds: string[]) => {
+    let next = [...tables];
 
+    syncedTables.forEach((saved, i) => {
+      const reqId = originalRequestIds[i];
+
+      if (reqId !== saved.id) updateTableIdInHistory(reqId, saved.id);
+
+      if (reqId.startsWith("clone:")) next = next.filter(t => t.id !== reqId);
+
+      const idx = next.findIndex(t => t.id === saved.id);
+      if (idx > -1) next[idx] = saved;
+      else next.push(saved);
+    });
+
+    updateTables(next);
+    if (syncedTables.length === 1) setCurrentId(syncedTables[0].id);
+  };
+
+  async function handleSaveTable() {
+    if (!currentTable) return;
+
+    const dataToSend = {
+      ...currentTable,
+      id: currentTable.id.replace("clone:", ""),
+      name: currentTable.name.replace("_clone_db", ""),
+    };
+
+    try {
+      const res = await fetch("http://localhost:4000/tables/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tables: [dataToSend] }),
+      });
+      const result = await res.json();
+      if (result.success) syncWithState(result.data, [currentTable.id]);
+    } catch {
+      alert("❌ Chyba při ukládání tabulky.");
+    }
+  }
+
+  async function handleSaveAll() {
+    const ids = tables.map(t => t.id);
+    const payload = tables.map(t => ({
+      ...t,
+      id: t.id.replace("clone:", ""),
+      name: t.name.replace("_clone_db", ""),
+    }));
+
+    try {
+      const res = await fetch("http://localhost:4000/tables/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tables: payload }),
+      });
+      const result = await res.json();
+      if (result.success) syncWithState(result.data, ids);
+    } catch {
+      alert("❌ Hromadná synchronizace selhala.");
+    }
+  }
+
+  /** -------------------- RETURN -------------------- */
   return {
     tables,
     currentId,

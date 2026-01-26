@@ -1,4 +1,5 @@
 import { prisma } from "../../shared/prisma/client.js";
+import { v4 as uuid } from "uuid";
 
 export const tableRepository = {
   findAll: () => prisma.tableEntity.findMany(),
@@ -11,12 +12,15 @@ export const tableRepository = {
     return prisma.$transaction(
       tables.map((t) => {
         const isNew = String(t.id).startsWith("tmp_");
-        const targetId = isNew ? "00000000-0000-0000-0000-000000000000" : t.id;
+        const targetId = isNew ? uuid() : t.id;
+
+        // fallback pro name
+        const name = t.name && t.name.trim() ? t.name : "Unnamed Table";
 
         return prisma.tableEntity.upsert({
           where: { id: targetId },
-          update: { name: t.name, data: { columns: t.columns, rows: t.rows } },
-          create: { name: t.name, data: { columns: t.columns, rows: t.rows } },
+          update: { name, data: { columns: t.columns || [], rows: t.rows || [] } },
+          create: { id: targetId, name, data: { columns: t.columns || [], rows: t.rows || [] } },
         });
       })
     );

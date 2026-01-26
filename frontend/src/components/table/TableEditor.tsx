@@ -14,6 +14,19 @@ export function TableEditor({
 }) {
   if (!table) return null;
 
+  // Normalizace řádků: ID první, ostatní doplnit
+  const normalizedTable: Table = {
+    ...table,
+    rows: table.rows.map((r) => {
+      const row: string[] = Array(table.columns.length).fill("");
+      row[0] = r[0]; // ID
+      for (let i = 1; i < table.columns.length; i++) {
+        row[i] = r[i] ?? "";
+      }
+      return row;
+    }),
+  };
+
   const {
     selectedCell,
     setSelectedCell,
@@ -23,7 +36,7 @@ export function TableEditor({
     deleteRow,
     addColumn,
     deleteColumn,
-  } = useTableEditor(table, onUpdate);
+  } = useTableEditor(normalizedTable, onUpdate);
 
   return (
     <div className="p-6 w-full bg-white flex-1 overflow-auto">
@@ -37,7 +50,6 @@ export function TableEditor({
             + Row Below
           </button>
         </div>
-
         <div className="flex gap-1 pr-3 border-r border-slate-200">
           <button onClick={() => addColumn("before")} className="px-3 py-1.5 hover:bg-white hover:shadow-sm rounded-lg text-xs font-bold text-slate-600 transition-all border border-transparent hover:border-slate-200">
             + Col Left
@@ -46,7 +58,6 @@ export function TableEditor({
             + Col Right
           </button>
         </div>
-
         <div className="flex gap-1 pr-3 border-r border-slate-200">
           <button onClick={deleteRow} className="px-3 py-1.5 hover:bg-red-50 text-red-600 rounded-lg text-xs font-bold transition-all border border-transparent hover:border-red-100">
             Del Row
@@ -55,7 +66,6 @@ export function TableEditor({
             Del Col
           </button>
         </div>
-
         <div className="flex gap-2 ml-auto">
           <button onClick={onExport} className="px-4 py-1.5 bg-white text-slate-600 border border-slate-200 rounded-lg text-xs font-bold hover:bg-slate-50 transition-all shadow-sm">
             Export
@@ -71,7 +81,7 @@ export function TableEditor({
         <table className="w-full border-collapse">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-200">
-              {table.columns.map((col, i) => (
+              {normalizedTable.columns.map((col, i) => (
                 <th key={i} className="border-r border-slate-200 last:border-0 p-0">
                   <input
                     value={col}
@@ -83,7 +93,7 @@ export function TableEditor({
             </tr>
           </thead>
           <tbody>
-            {table.rows.map((row, rIdx) => (
+            {normalizedTable.rows.map((row, rIdx) => (
               <tr key={rIdx} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/30 transition-colors">
                 {row.map((cell, cIdx) => (
                   <td
@@ -94,9 +104,7 @@ export function TableEditor({
                     onClick={() => setSelectedCell({ row: rIdx, col: cIdx })}
                   >
                     {cIdx === 0 ? (
-                      <div className="px-4 py-2 text-[10px] font-mono text-slate-400 select-none">
-                        {cell}
-                      </div>
+                      <div className="px-4 py-2 text-[10px] font-mono text-slate-400 select-none">{cell}</div>
                     ) : (
                       <input
                         value={cell}
