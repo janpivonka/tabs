@@ -21,6 +21,7 @@ export default function App() {
     handleRename,
     handleChangeTable,
     handleDelete,
+    handleDeleteMultiple, // <--- 1. PŘIDÁNO
     handleSaveAll,
     handleSaveTable
   } = useApp();
@@ -34,6 +35,7 @@ export default function App() {
         onCreate={handleCreate}
         onRename={handleRename}
         onDelete={handleDelete}
+        onDeleteMultiple={handleDeleteMultiple} // <--- 2. PŘIDÁNO (propojení se Sidebar)
         onPaste={handlePaste}
         onSaveAll={handleSaveAll}
       />
@@ -84,7 +86,7 @@ export default function App() {
               key={currentTable.id}
               table={currentTable}
               onUpdate={handleChangeTable}
-              onSave={handleSaveTable} // Pouze pro aktuální tabulku
+              onSave={handleSaveTable}
               onExport={() => alert("Exportování dat...")}
             />
           ) : (

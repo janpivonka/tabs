@@ -4,6 +4,9 @@ interface TableItemProps {
   table: Table;
   isSelected: boolean;
   onSelect: () => void;
+  isMultiSelected?: boolean;
+  toggleSelect?: (id: string) => void;
+  showCheckbox?: boolean;
   onStartRename?: () => void;
   onDelete?: () => void;
   renameId?: string | null;
@@ -16,6 +19,9 @@ export function TableItem({
   table,
   isSelected,
   onSelect,
+  isMultiSelected = false,
+  toggleSelect,
+  showCheckbox = false,
   onStartRename,
   onDelete,
   renameId,
@@ -30,18 +36,26 @@ export function TableItem({
       <div
         className={`
           flex items-center justify-between px-3 py-2 rounded-xl transition-all duration-200 cursor-pointer
-          ${isSelected 
-            ? "bg-indigo-100/80 text-indigo-900 shadow-sm ring-1 ring-indigo-200" 
+          ${isSelected
+            ? "bg-indigo-100/80 text-indigo-900 shadow-sm ring-1 ring-indigo-200"
             : "hover:bg-white hover:shadow-md hover:shadow-slate-200/50 text-slate-600 hover:text-slate-900"
           }
         `}
       >
-        {/* NÁZEV / INPUT */}
-        <div className="flex-1 flex items-center gap-2 overflow-hidden" onClick={onSelect}>
-          {!isRenaming && (
+        <div className="flex items-center gap-2 overflow-hidden" onClick={onSelect}>
+          {showCheckbox && toggleSelect && (
+            <input
+              type="checkbox"
+              checked={isMultiSelected}
+              onChange={(e) => { e.stopPropagation(); toggleSelect(table.id); }}
+              className="w-4 h-4 text-indigo-600 border-gray-300 rounded"
+            />
+          )}
+
+          {!isRenaming && !showCheckbox && (
             <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isSelected ? "bg-indigo-500" : "bg-slate-300 group-hover:bg-slate-400"}`} />
           )}
-          
+
           {isRenaming && renameValue !== undefined && setRenameValue && commitRename ? (
             <input
               autoFocus
@@ -56,18 +70,15 @@ export function TableItem({
               onClick={(e) => e.stopPropagation()}
             />
           ) : (
-            <span className="text-sm font-medium truncate tracking-tight">
-              {table.name}
-            </span>
+            <span className="text-sm font-medium truncate tracking-tight">{table.name}</span>
           )}
         </div>
 
-        {/* AKCE (Zobrazené při hoveru) */}
         {!isRenaming && (
           <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity ml-2">
             {onStartRename && (
-              <button 
-                onClick={(e) => { e.stopPropagation(); onStartRename(); }} 
+              <button
+                onClick={(e) => { e.stopPropagation(); onStartRename(); }}
                 className="p-1.5 hover:bg-indigo-50 rounded-lg text-slate-400 hover:text-indigo-600 transition-colors"
                 title="Přejmenovat"
               >
@@ -77,8 +88,8 @@ export function TableItem({
               </button>
             )}
             {onDelete && (
-              <button 
-                onClick={(e) => { e.stopPropagation(); onDelete(); }} 
+              <button
+                onClick={(e) => { e.stopPropagation(); onDelete(); }}
                 className="p-1.5 hover:bg-red-50 rounded-lg text-slate-400 hover:text-red-500 transition-colors"
                 title="Smazat"
               >

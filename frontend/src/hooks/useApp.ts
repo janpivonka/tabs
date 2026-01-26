@@ -10,19 +10,15 @@ import { useClipboardPaste } from "./useClipboardPaste";
 /** -------------------- UTIL -------------------- */
 const clone = <T,>(v: T): T => structuredClone(v);
 
-/**
- * Normalize table rows to match column count and always include ID column
- */
 function normalizeTable(table: TableData): TableData {
-  const hasId = table.columns[0] === "ID";
+  const hasId = table.columns.some(c => c.toLowerCase() === "id");
   const columns = hasId ? table.columns : ["ID", ...table.columns];
 
   const rows = table.rows.map((r, i) => {
     const row: string[] = [];
-    row[0] = String(i + 1); // ID vždy první
-
-    for (let j = 1; j < columns.length; j++) {
-      row[j] = hasId ? r[j] ?? "" : r[j - 1] ?? "";
+    if (!hasId) row[0] = String(i + 1);
+    for (let j = 0; j < (hasId ? columns.length : columns.length - 1); j++) {
+      row[hasId ? j : j + 1] = r[j] ?? "";
     }
     return row;
   });
@@ -49,7 +45,6 @@ export function useApp() {
 
   const currentTable = tables.find(t => t.id === currentId) || null;
 
-  /** -------------------- CLIPBOARD -------------------- */
   const { handlePasteText } = useClipboardPaste((table: TableData) => {
     handlePaste(table);
   });
@@ -136,6 +131,7 @@ export function useApp() {
     setCurrentId(updated.id);
   }
 
+  /** -------------------- DELETE SINGLE -------------------- */
   function handleDelete(id: string) {
     const prev = tables.find(t => t.id === id);
     if (!prev) return;
@@ -152,23 +148,43 @@ export function useApp() {
     if (currentId === id) setCurrentId(null);
   }
 
+  /** -------------------- DELETE MULTI -------------------- */
+  function handleDeleteMultiple(ids: string[]) {
+    const remaining = tables.filter(t => !ids.includes(t.id));
+
+    ids.forEach(id => {
+      const prev = tables.find(t => t.id === id);
+      if (!prev) return;
+
+      pushHistory({
+        tableId: id,
+        type: "row_delete",
+        description: `Smazání tabulky "${prev.name}"`,
+        before: clone(prev),
+        after: null,
+      });
+    });
+
+    updateTables(remaining);
+
+    if (currentId && ids.includes(currentId)) setCurrentId(null);
+  }
+
   /** -------------------- DB SYNC -------------------- */
   const syncWithState = (syncedTables: TableData[], originalRequestIds: string[]) => {
     let next = [...tables];
 
     syncedTables.forEach((saved, i) => {
       const reqId = originalRequestIds[i];
-
       if (reqId !== saved.id) updateTableIdInHistory(reqId, saved.id);
-
-      if (reqId.startsWith("clone:")) next = next.filter(t => t.id !== reqId);
-
+      next = next.filter(t => t.id !== reqId);
       const idx = next.findIndex(t => t.id === saved.id);
       if (idx > -1) next[idx] = saved;
       else next.push(saved);
     });
 
     updateTables(next);
+
     if (syncedTables.length === 1) setCurrentId(syncedTables[0].id);
   };
 
@@ -194,13 +210,15 @@ export function useApp() {
     }
   }
 
-  async function handleSaveAll() {
-    const ids = tables.map(t => t.id);
-    const payload = tables.map(t => ({
-      ...t,
-      id: t.id.replace("clone:", ""),
-      name: t.name.replace("_clone_db", ""),
-    }));
+  async function handleSaveAll(ids?: string[]) {
+    const idsToSend = ids || tables.map(t => t.id);
+    const payload = tables
+      .filter(t => idsToSend.includes(t.id))
+      .map(t => ({
+        ...t,
+        id: t.id.replace("clone:", ""),
+        name: t.name.replace("_clone_db", ""),
+      }));
 
     try {
       const res = await fetch("http://localhost:4000/tables/sync", {
@@ -209,7 +227,7 @@ export function useApp() {
         body: JSON.stringify({ tables: payload }),
       });
       const result = await res.json();
-      if (result.success) syncWithState(result.data, ids);
+      if (result.success) syncWithState(result.data, idsToSend);
     } catch {
       alert("❌ Hromadná synchronizace selhala.");
     }
@@ -236,6 +254,7 @@ export function useApp() {
     handleRename,
     handleChangeTable,
     handleDelete,
+    handleDeleteMultiple, // nová funkce pro hromadné mazání
 
     handlePasteText,
     handleSaveAll,

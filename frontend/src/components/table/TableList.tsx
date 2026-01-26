@@ -6,6 +6,8 @@ interface TableListProps {
   currentId: string | null;
   isDb?: boolean;
   onSelect: (t: Table) => void;
+  selectedIds?: string[];
+  toggleSelect?: (id: string) => void;
   renameId?: string | null;
   renameValue?: string;
   setRenameValue?: (val: string) => void;
@@ -19,6 +21,8 @@ export function TableList({
   currentId,
   isDb = false,
   onSelect,
+  selectedIds = [],
+  toggleSelect,
   renameId,
   renameValue,
   setRenameValue,
@@ -41,13 +45,15 @@ export function TableList({
             table={t}
             isSelected={currentId === t.id}
             onSelect={() => onSelect(t)}
+            isMultiSelected={selectedIds.includes(t.id)}
+            toggleSelect={toggleSelect}
             renameId={renameId}
             renameValue={renameValue}
             setRenameValue={setRenameValue}
             commitRename={commitRename}
-            // Přejmenování a mazání povolíme jen pro lokální tabulky
             onStartRename={startRename && !isDb ? () => startRename(t) : undefined}
             onDelete={setDeleteTarget && !isDb ? () => setDeleteTarget(t) : undefined}
+            showCheckbox={!isDb && toggleSelect !== undefined}
           />
         ))
       )}

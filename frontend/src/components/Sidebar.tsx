@@ -18,18 +18,21 @@ export function Sidebar(props: any) {
     dbTables,
     localTables,
     handleDbClick,
+    selectedIds,
+    toggleSelect,
+    handleDeleteSelected,
+    handleSaveSelected,
   } = useSidebar(props);
 
   return (
     <>
       <aside className="w-72 h-screen bg-slate-50 border-r border-slate-200 flex flex-col shadow-[1px_0_5px_rgba(0,0,0,0.02)]">
-        {/* HEADER A VYHLEDÁVÁNÍ */}
+        {/* HEADER */}
         <div className="p-6 pb-2">
           <h2 className="text-lg font-black text-slate-800 tracking-tight mb-4 flex items-center gap-2">
             <span className="w-2 h-6 bg-indigo-600 rounded-full"></span>
             Tabulky
           </h2>
-          
           <div className="relative group mb-4">
             <input
               value={search}
@@ -48,11 +51,12 @@ export function Sidebar(props: any) {
           </button>
         </div>
 
-        {/* SEZNAMY TABULEK */}
+        {/* LIST */}
         <div className="flex-1 overflow-y-auto px-4 py-2 scrollbar-thin scrollbar-thumb-slate-200">
+          {/* DB TABLES */}
           <div className="mb-6">
             <h3 className="px-2 text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] mb-2 flex items-center justify-between">
-              Databázové 
+              Databázové
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
             </h3>
             <TableList
@@ -63,13 +67,16 @@ export function Sidebar(props: any) {
             />
           </div>
 
+          {/* LOCAL TABLES */}
           <div className="mb-6">
-            <h3 className="px-2 text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] mb-2">
+            <h3 className="px-2 text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] mb-2 flex items-center justify-between">
               Lokální pracovní kopie
             </h3>
             <TableList
               tables={localTables}
               currentId={props.currentId}
+              selectedIds={selectedIds}
+              toggleSelect={toggleSelect}
               onSelect={t => props.onSelect(t.id)}
               renameId={renameId}
               renameValue={renameValue}
@@ -83,7 +90,12 @@ export function Sidebar(props: any) {
 
         {/* FOOTER */}
         <div className="p-4 bg-white border-t border-slate-200">
-          <SidebarFooter onPaste={handlePaste} onSaveAll={props.onSaveAll} />
+          <SidebarFooter
+            onPaste={handlePaste}
+            onSaveAll={handleSaveSelected}
+            onDeleteSelected={handleDeleteSelected}
+            selectedCount={selectedIds.length}
+          />
         </div>
       </aside>
 
@@ -91,7 +103,10 @@ export function Sidebar(props: any) {
         <DeleteModal
           table={deleteTarget}
           onCancel={() => setDeleteTarget(null)}
-          onConfirm={() => { props.onDelete(deleteTarget.id); setDeleteTarget(null); }}
+          onConfirm={() => {
+            props.onDelete(deleteTarget.id);
+            setDeleteTarget(null);
+          }}
         />
       )}
     </>
