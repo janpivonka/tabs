@@ -17,11 +17,12 @@ export default function App() {
     undo,
     redo,
     handleCreate,
-    handlePaste,
+    handleClone,              // Pro klonování DB tabulek
+    handleImportFromClipboard, // Pro import ze schránky (původní handlePasteText)
     handleRename,
     handleChangeTable,
     handleDelete,
-    handleDeleteMultiple, // <--- 1. PŘIDÁNO
+    handleDeleteMultiple,
     handleSaveAll,
     handleSaveTable
   } = useApp();
@@ -35,8 +36,9 @@ export default function App() {
         onCreate={handleCreate}
         onRename={handleRename}
         onDelete={handleDelete}
-        onDeleteMultiple={handleDeleteMultiple} // <--- 2. PŘIDÁNO (propojení se Sidebar)
-        onPaste={handlePaste}
+        onDeleteMultiple={handleDeleteMultiple}
+        onPaste={handleImportFromClipboard} // Tlačítko "Importovat data" ve footeru
+        onClone={handleClone}               // Funkce pro klonování z DB tabulek
         onSaveAll={handleSaveAll}
       />
 

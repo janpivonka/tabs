@@ -45,8 +45,22 @@ export function useApp() {
 
   const currentTable = tables.find(t => t.id === currentId) || null;
 
-  const { handlePasteText } = useClipboardPaste((table: TableData) => {
-    handlePaste(table);
+  /** * CLIPBOARD LOGIKA
+   * Zde byla chyba: vytahujeme 'triggerPaste' z hooku a přejmenováváme na 'handleImportFromClipboard'
+   */
+  const { triggerPaste: handleImportFromClipboard } = useClipboardPaste((tableData: TableData) => {
+    const normalized = normalizeTable(tableData);
+
+    pushHistory({
+      tableId: normalized.id,
+      type: "row_add",
+      description: `Import dat ze schránky`,
+      before: null,
+      after: clone(normalized),
+    });
+
+    updateTables([normalized, ...tables]);
+    setCurrentId(normalized.id);
   });
 
   /** -------------------- CRUD -------------------- */
@@ -81,13 +95,14 @@ export function useApp() {
     setCurrentId(table.id);
   }
 
-  function handlePaste(table: TableData) {
+  // Funkce pro přímé klonování (bez použití schránky)
+  function handleClone(table: TableData) {
     const normalized = normalizeTable(table);
 
     pushHistory({
       tableId: normalized.id,
       type: "row_add",
-      description: `Vložení tabulky "${normalized.name}"`,
+      description: `Klonování tabulky "${normalized.name}"`,
       before: null,
       after: clone(normalized),
     });
@@ -131,7 +146,7 @@ export function useApp() {
     setCurrentId(updated.id);
   }
 
-  /** -------------------- DELETE SINGLE -------------------- */
+  /** -------------------- DELETE -------------------- */
   function handleDelete(id: string) {
     const prev = tables.find(t => t.id === id);
     if (!prev) return;
@@ -148,7 +163,6 @@ export function useApp() {
     if (currentId === id) setCurrentId(null);
   }
 
-  /** -------------------- DELETE MULTI -------------------- */
   function handleDeleteMultiple(ids: string[]) {
     const remaining = tables.filter(t => !ids.includes(t.id));
 
@@ -166,14 +180,12 @@ export function useApp() {
     });
 
     updateTables(remaining);
-
     if (currentId && ids.includes(currentId)) setCurrentId(null);
   }
 
   /** -------------------- DB SYNC -------------------- */
   const syncWithState = (syncedTables: TableData[], originalRequestIds: string[]) => {
     let next = [...tables];
-
     syncedTables.forEach((saved, i) => {
       const reqId = originalRequestIds[i];
       if (reqId !== saved.id) updateTableIdInHistory(reqId, saved.id);
@@ -182,21 +194,17 @@ export function useApp() {
       if (idx > -1) next[idx] = saved;
       else next.push(saved);
     });
-
     updateTables(next);
-
     if (syncedTables.length === 1) setCurrentId(syncedTables[0].id);
   };
 
   async function handleSaveTable() {
     if (!currentTable) return;
-
     const dataToSend = {
       ...currentTable,
       id: currentTable.id.replace("clone:", ""),
       name: currentTable.name.replace("_clone_db", ""),
     };
-
     try {
       const res = await fetch("http://localhost:4000/tables/sync", {
         method: "POST",
@@ -250,13 +258,13 @@ export function useApp() {
     redo: () => redo(updateTables, setCurrentId),
 
     handleCreate,
-    handlePaste,
+    handleClone,
+    handleImportFromClipboard, // Exportujeme opravenou funkci pro App.tsx
+
     handleRename,
     handleChangeTable,
     handleDelete,
-    handleDeleteMultiple, // nová funkce pro hromadné mazání
-
-    handlePasteText,
+    handleDeleteMultiple,
     handleSaveAll,
     handleSaveTable,
   };

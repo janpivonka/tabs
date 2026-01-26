@@ -1,3 +1,4 @@
+// src/hooks/useSidebar.ts
 import { useState, useMemo } from "react";
 import type { Table } from "../domain/table";
 
@@ -8,21 +9,21 @@ interface UseSidebarProps {
   onCreate: () => void;
   onRename: (id: string, newName: string) => void;
   onDelete: (id: string) => void;
-  onDeleteMultiple: (ids: string[]) => void; // Musí zde být
-  onPaste: (table: Table) => void;
+  onDeleteMultiple: (ids: string[]) => void;
+  onPaste: () => void;
+  onClone: (table: Table) => void;
   onSaveAll: (ids: string[]) => void;
 }
 
 export function useSidebar(props: UseSidebarProps) {
-  // Přidáme onDeleteMultiple do seznamu vytažených props
-  const { 
-    tables, 
-    currentId, 
-    onSelect, 
-    onRename, 
-    onDelete, 
-    onDeleteMultiple, // <--- PŘIDÁNO
-    onPaste 
+  const {
+    tables,
+    onSelect,
+    onRename,
+    onDeleteMultiple,
+    onPaste,
+    onClone,
+    onSaveAll
   } = props;
 
   const [search, setSearch] = useState("");
@@ -31,22 +32,25 @@ export function useSidebar(props: UseSidebarProps) {
   const [deleteTarget, setDeleteTarget] = useState<Table | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
+  // 1. Filtrování tabulek (zůstává z nové verze)
   const dbTables = useMemo(
-    () =>
-      tables.filter(
-        t => !t.id.startsWith("tmp_") && !t.id.startsWith("clone:") && t.name.toLowerCase().includes(search.toLowerCase())
-      ),
+    () => tables.filter(t =>
+      !t.id.startsWith("tmp_") &&
+      !t.id.startsWith("clone:") &&
+      t.name.toLowerCase().includes(search.toLowerCase())
+    ),
     [tables, search]
   );
 
   const localTables = useMemo(
-    () =>
-      tables.filter(
-        t => (t.id.startsWith("tmp_") || t.id.startsWith("clone:")) && t.name.toLowerCase().includes(search.toLowerCase())
-      ),
+    () => tables.filter(t =>
+      (t.id.startsWith("tmp_") || t.id.startsWith("clone:")) &&
+      t.name.toLowerCase().includes(search.toLowerCase())
+    ),
     [tables, search]
   );
 
+  /** --- CRUD AKCE --- */
   const startRename = (t: Table) => {
     setRenameId(t.id);
     setRenameValue(t.name);
@@ -59,28 +63,24 @@ export function useSidebar(props: UseSidebarProps) {
     setRenameId(null);
   };
 
-  const handlePasteClipboard = async () => {
-    try {
-      const text = await navigator.clipboard.readText();
-      if (!text) return;
-      // ... (zbytek logiky clipboardu zůstává stejný)
-    } catch {
-      alert("❌ Chyba clipboardu");
-    }
+  const handlePaste = () => {
+    onPaste();
   };
 
   const handleDbClick = (t: Table) => {
     const cloneId = `clone:${t.id}`;
     const existingClone = localTables.find(lt => lt.id === cloneId);
+
     if (existingClone) {
       onSelect(existingClone.id);
     } else {
       const cloneTable: Table = { ...t, id: cloneId, name: `${t.name}_clone_db` };
-      onPaste(cloneTable);
+      onClone(cloneTable);
       onSelect(cloneTable.id);
     }
   };
 
+  /** --- HROMADNÉ AKCE (Sjednoceno a opraveno) --- */
   const toggleSelect = (id: string) => {
     setSelectedIds(prev =>
       prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
@@ -88,19 +88,28 @@ export function useSidebar(props: UseSidebarProps) {
   };
 
   const handleDeleteSelected = () => {
-    // Teď už onDeleteMultiple nebude undefined a funkce se spustí
-    if (selectedIds.length > 0) {
-      onDeleteMultiple(selectedIds);
-    } else {
-      onDeleteMultiple(localTables.map(t => t.id));
+    // Pokud jsou vybrané konkrétní checkboxy, smažeme je.
+    // Pokud není vybráno nic, smažeme VŠECHNY lokální tabulky (jako v původní verzi).
+    const idsToDelete = selectedIds.length > 0
+      ? selectedIds
+      : localTables.map(t => t.id);
+
+    if (idsToDelete.length > 0) {
+      onDeleteMultiple(idsToDelete);
+      setSelectedIds([]); // Vyčistit výběr po akci
     }
-    setSelectedIds([]);
   };
 
   const handleSaveSelected = () => {
-    const idsToSave = selectedIds.length > 0 ? selectedIds : localTables.map(t => t.id);
-    props.onSaveAll(idsToSave);
-    setSelectedIds([]);
+    // Stejná logika: buď vybrané, nebo všechno lokální
+    const idsToSave = selectedIds.length > 0
+      ? selectedIds
+      : localTables.map(t => t.id);
+
+    if (idsToSave.length > 0) {
+      onSaveAll(idsToSave);
+      setSelectedIds([]); // Vyčistit výběr po akci
+    }
   };
 
   return {
@@ -113,7 +122,7 @@ export function useSidebar(props: UseSidebarProps) {
     startRename,
     deleteTarget,
     setDeleteTarget,
-    handlePaste: handlePasteClipboard,
+    handlePaste,
     dbTables,
     localTables,
     handleDbClick,
