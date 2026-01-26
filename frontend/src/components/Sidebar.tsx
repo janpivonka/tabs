@@ -1,7 +1,8 @@
+// src/components/Sidebar.tsx
 import { useSidebar } from "../hooks/useSidebar";
 import { TableList } from "./table/TableList";
 import { SidebarFooter } from "./SidebarFooter";
-import { DeleteModal } from "./table/DeleteModal";
+import { ActionModal } from "./common/ActionModal"; // Tady už importujeme tvůj nový modal
 
 export function Sidebar(props: any) {
   const {
@@ -12,8 +13,12 @@ export function Sidebar(props: any) {
     setRenameValue,
     commitRename,
     startRename,
-    deleteTarget,
-    setDeleteTarget,
+    // --- ZMĚNA: Používáme nové funkce z useSidebar ---
+    activeModal,
+    setActiveModal,
+    confirmModal,
+    handleDeleteClick,
+    // ------------------------------------------------
     handlePaste,
     dbTables,
     localTables,
@@ -83,7 +88,8 @@ export function Sidebar(props: any) {
               setRenameValue={setRenameValue}
               commitRename={commitRename}
               startRename={startRename}
-              setDeleteTarget={setDeleteTarget}
+              // --- ZMĚNA: Používáme handleDeleteClick pro modál ---
+              setDeleteTarget={handleDeleteClick}
             />
           </div>
         </div>
@@ -99,14 +105,21 @@ export function Sidebar(props: any) {
         </div>
       </aside>
 
-      {deleteTarget && (
-        <DeleteModal
-          table={deleteTarget}
-          onCancel={() => setDeleteTarget(null)}
-          onConfirm={() => {
-            props.onDelete(deleteTarget.id);
-            setDeleteTarget(null);
-          }}
+      {/* JEDNOTNÝ MODÁL PRO VŠECHNY AKCE V SIDEBARU */}
+      {activeModal && (
+        <ActionModal
+          variant={activeModal.type === "delete" ? "danger" : "info"}
+          title={activeModal.type === "delete" ? "Smazat data" : "Synchronizace"}
+          description={
+            activeModal.type === "delete"
+              ? activeModal.singleName 
+                ? `Opravdu chcete smazat tabulku "${activeModal.singleName}"?` 
+                : `Opravdu chcete smazat ${activeModal.targets.length} vybraných kopií?`
+              : `Chcete odeslat ${activeModal.targets.length} vybraných tabulek do databáze?`
+          }
+          confirmLabel={activeModal.type === "delete" ? "Smazat" : "Odeslat"}
+          onConfirm={confirmModal}
+          onCancel={() => setActiveModal(null)}
         />
       )}
     </>

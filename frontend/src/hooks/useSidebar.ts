@@ -15,11 +15,19 @@ interface UseSidebarProps {
   onSaveAll: (ids: string[]) => void;
 }
 
+// Definice typu pro stav modálu
+export type SidebarModalState = {
+  type: "delete" | "sync";
+  targets: string[];
+  singleName?: string;
+} | null;
+
 export function useSidebar(props: UseSidebarProps) {
   const {
     tables,
     onSelect,
     onRename,
+    onDelete,
     onDeleteMultiple,
     onPaste,
     onClone,
@@ -29,87 +37,87 @@ export function useSidebar(props: UseSidebarProps) {
   const [search, setSearch] = useState("");
   const [renameId, setRenameId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
-  const [deleteTarget, setDeleteTarget] = useState<Table | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
-  // 1. Filtrování tabulek (zůstává z nové verze)
+  // NOVÉ: Náhrada za deleteTarget
+  const [activeModal, setActiveModal] = useState<SidebarModalState>(null);
+
   const dbTables = useMemo(
-    () => tables.filter(t =>
-      !t.id.startsWith("tmp_") &&
-      !t.id.startsWith("clone:") &&
-      t.name.toLowerCase().includes(search.toLowerCase())
-    ),
+    () => tables.filter(t => !t.id.startsWith("tmp_") && !t.id.startsWith("clone:") && t.name.toLowerCase().includes(search.toLowerCase())),
     [tables, search]
   );
 
   const localTables = useMemo(
-    () => tables.filter(t =>
-      (t.id.startsWith("tmp_") || t.id.startsWith("clone:")) &&
-      t.name.toLowerCase().includes(search.toLowerCase())
-    ),
+    () => tables.filter(t => (t.id.startsWith("tmp_") || t.id.startsWith("clone:")) && t.name.toLowerCase().includes(search.toLowerCase())),
     [tables, search]
   );
 
-  /** --- CRUD AKCE --- */
+  /** --- AKCE PRO MODÁLY --- */
+
+  // Potvrzení akce v modálu
+  const confirmModal = () => {
+    if (!activeModal) return;
+
+    if (activeModal.type === "delete") {
+      if (activeModal.targets.length === 1) {
+        onDelete(activeModal.targets[0]);
+      } else {
+        onDeleteMultiple(activeModal.targets);
+      }
+    } else if (activeModal.type === "sync") {
+      onSaveAll(activeModal.targets);
+    }
+
+    setSelectedIds([]);
+    setActiveModal(null);
+  };
+
+  /** --- TRIGGERY MODÁLŮ --- */
+
+  // Mazání jedné tabulky (voláno z TableList)
+  const handleDeleteClick = (table: Table) => {
+    setActiveModal({
+      type: "delete",
+      targets: [table.id],
+      singleName: table.name
+    });
+  };
+
+  const handleDeleteSelected = () => {
+    const idsToDelete = selectedIds.length > 0 ? selectedIds : localTables.map(t => t.id);
+    if (idsToDelete.length > 0) {
+      setActiveModal({ type: "delete", targets: idsToDelete });
+    }
+  };
+
+  const handleSaveSelected = () => {
+    const idsToSave = selectedIds.length > 0 ? selectedIds : localTables.map(t => t.id);
+    if (idsToSave.length > 0) {
+      setActiveModal({ type: "sync", targets: idsToSave });
+    }
+  };
+
+  /** --- OSTATNÍ AKCE --- */
+
   const startRename = (t: Table) => {
     setRenameId(t.id);
     setRenameValue(t.name);
   };
 
   const commitRename = () => {
-    if (renameId && renameValue.trim()) {
-      onRename(renameId, renameValue.trim());
-    }
+    if (renameId && renameValue.trim()) onRename(renameId, renameValue.trim());
     setRenameId(null);
-  };
-
-  const handlePaste = () => {
-    onPaste();
   };
 
   const handleDbClick = (t: Table) => {
     const cloneId = `clone:${t.id}`;
     const existingClone = localTables.find(lt => lt.id === cloneId);
-
-    if (existingClone) {
-      onSelect(existingClone.id);
-    } else {
-      const cloneTable: Table = { ...t, id: cloneId, name: `${t.name}_clone_db` };
-      onClone(cloneTable);
-      onSelect(cloneTable.id);
-    }
+    if (existingClone) onSelect(existingClone.id);
+    else onClone({ ...t, id: cloneId, name: `${t.name}_clone_db` });
   };
 
-  /** --- HROMADNÉ AKCE (Sjednoceno a opraveno) --- */
   const toggleSelect = (id: string) => {
-    setSelectedIds(prev =>
-      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-    );
-  };
-
-  const handleDeleteSelected = () => {
-    // Pokud jsou vybrané konkrétní checkboxy, smažeme je.
-    // Pokud není vybráno nic, smažeme VŠECHNY lokální tabulky (jako v původní verzi).
-    const idsToDelete = selectedIds.length > 0
-      ? selectedIds
-      : localTables.map(t => t.id);
-
-    if (idsToDelete.length > 0) {
-      onDeleteMultiple(idsToDelete);
-      setSelectedIds([]); // Vyčistit výběr po akci
-    }
-  };
-
-  const handleSaveSelected = () => {
-    // Stejná logika: buď vybrané, nebo všechno lokální
-    const idsToSave = selectedIds.length > 0
-      ? selectedIds
-      : localTables.map(t => t.id);
-
-    if (idsToSave.length > 0) {
-      onSaveAll(idsToSave);
-      setSelectedIds([]); // Vyčistit výběr po akci
-    }
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   };
 
   return {
@@ -120,9 +128,11 @@ export function useSidebar(props: UseSidebarProps) {
     setRenameValue,
     commitRename,
     startRename,
-    deleteTarget,
-    setDeleteTarget,
-    handlePaste,
+    activeModal,    // NOVÉ
+    setActiveModal, // NOVÉ
+    confirmModal,   // NOVÉ
+    handleDeleteClick, // NOVÉ
+    handlePaste: onPaste,
     dbTables,
     localTables,
     handleDbClick,
