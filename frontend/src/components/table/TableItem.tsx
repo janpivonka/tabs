@@ -1,3 +1,4 @@
+// src/components/table/TableItem.tsx
 import type { Table } from "../../domain/table";
 
 interface TableItemProps {
@@ -42,20 +43,43 @@ export function TableItem({
           }
         `}
       >
-        <div className="flex items-center gap-2 overflow-hidden" onClick={onSelect}>
+        <div className="flex items-center gap-2 overflow-hidden flex-1" onClick={onSelect}>
+          
+          {/* MODERNÍ CUSTOM CHECKBOX */}
           {showCheckbox && toggleSelect && (
-            <input
-              type="checkbox"
-              checked={isMultiSelected}
-              onChange={(e) => { e.stopPropagation(); toggleSelect(table.id); }}
-              className="w-4 h-4 text-indigo-600 border-gray-300 rounded"
-            />
+            <div 
+              onClick={(e) => { 
+                e.stopPropagation(); 
+                toggleSelect(table.id); 
+              }}
+              className={`
+                shrink-0 w-5 h-5 rounded-lg border-2 transition-all duration-200 flex items-center justify-center
+                ${isMultiSelected 
+                  ? "bg-indigo-600 border-indigo-600 shadow-sm shadow-indigo-200" 
+                  : "bg-white border-slate-200 group-hover:border-indigo-300"
+                }
+              `}
+            >
+              {isMultiSelected && (
+                <svg 
+                  className="w-3.5 h-3.5 text-white animate-in zoom-in duration-200" 
+                  fill="none" 
+                  viewBox="0 0 24 24" 
+                  stroke="currentColor" 
+                  strokeWidth="4"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              )}
+            </div>
           )}
 
+          {/* TEČKA PRO DB TABULKY (KDE NENÍ CHECKBOX) */}
           {!isRenaming && !showCheckbox && (
             <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isSelected ? "bg-indigo-500" : "bg-slate-300 group-hover:bg-slate-400"}`} />
           )}
 
+          {/* INPUT PRO RENAMING */}
           {isRenaming && renameValue !== undefined && setRenameValue && commitRename ? (
             <input
               autoFocus
@@ -70,16 +94,19 @@ export function TableItem({
               onClick={(e) => e.stopPropagation()}
             />
           ) : (
-            <span className="text-sm font-medium truncate tracking-tight">{table.name}</span>
+            <span className={`text-sm tracking-tight truncate ${isSelected ? "font-bold" : "font-medium"}`}>
+              {table.name}
+            </span>
           )}
         </div>
 
+        {/* AKCE (RENAME / DELETE) */}
         {!isRenaming && (
-          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity ml-2">
+          <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity ml-2">
             {onStartRename && (
               <button
                 onClick={(e) => { e.stopPropagation(); onStartRename(); }}
-                className="p-1.5 hover:bg-indigo-50 rounded-lg text-slate-400 hover:text-indigo-600 transition-colors"
+                className="p-1.5 hover:bg-white rounded-lg text-slate-400 hover:text-indigo-600 transition-all active:scale-90"
                 title="Přejmenovat"
               >
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -90,7 +117,7 @@ export function TableItem({
             {onDelete && (
               <button
                 onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                className="p-1.5 hover:bg-red-50 rounded-lg text-slate-400 hover:text-red-500 transition-colors"
+                className="p-1.5 hover:bg-red-50 rounded-lg text-slate-400 hover:text-red-500 transition-all active:scale-90"
                 title="Smazat"
               >
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -39,16 +39,25 @@ export function useSidebar(props: UseSidebarProps) {
   const [renameValue, setRenameValue] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
-  // NOVÉ: Náhrada za deleteTarget
+  // Stav pro ActionModal
   const [activeModal, setActiveModal] = useState<SidebarModalState>(null);
 
+  // Filtrované tabulky z DB
   const dbTables = useMemo(
-    () => tables.filter(t => !t.id.startsWith("tmp_") && !t.id.startsWith("clone:") && t.name.toLowerCase().includes(search.toLowerCase())),
+    () => tables.filter(t =>
+      !t.id.startsWith("tmp_") &&
+      !t.id.startsWith("clone:") &&
+      t.name.toLowerCase().includes(search.toLowerCase())
+    ),
     [tables, search]
   );
 
+  // Filtrované lokální pracovní kopie
   const localTables = useMemo(
-    () => tables.filter(t => (t.id.startsWith("tmp_") || t.id.startsWith("clone:")) && t.name.toLowerCase().includes(search.toLowerCase())),
+    () => tables.filter(t =>
+      (t.id.startsWith("tmp_") || t.id.startsWith("clone:")) &&
+      t.name.toLowerCase().includes(search.toLowerCase())
+    ),
     [tables, search]
   );
 
@@ -97,6 +106,28 @@ export function useSidebar(props: UseSidebarProps) {
     }
   };
 
+  /** --- SELEKCE --- */
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  // NOVÉ: Funkce pro hromadné označení/odoznačení viditelných lokálních tabulek
+  const toggleSelectAll = () => {
+    const allLocalIds = localTables.map(t => t.id);
+    const areAllSelected = allLocalIds.length > 0 && allLocalIds.every(id => selectedIds.includes(id));
+
+    if (areAllSelected) {
+      // Pokud jsou všechny vybrané, odoznačíme ty, které jsou aktuálně v localTables
+      setSelectedIds(prev => prev.filter(id => !allLocalIds.includes(id)));
+    } else {
+      // Jinak přidáme všechny z localTables (pomocí Set zajistíme unikátnost)
+      setSelectedIds(prev => Array.from(new Set([...prev, ...allLocalIds])));
+    }
+  };
+
   /** --- OSTATNÍ AKCE --- */
 
   const startRename = (t: Table) => {
@@ -116,10 +147,6 @@ export function useSidebar(props: UseSidebarProps) {
     else onClone({ ...t, id: cloneId, name: `${t.name}_clone_db` });
   };
 
-  const toggleSelect = (id: string) => {
-    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
-  };
-
   return {
     search,
     setSearch,
@@ -128,16 +155,17 @@ export function useSidebar(props: UseSidebarProps) {
     setRenameValue,
     commitRename,
     startRename,
-    activeModal,    // NOVÉ
-    setActiveModal, // NOVÉ
-    confirmModal,   // NOVÉ
-    handleDeleteClick, // NOVÉ
+    activeModal,
+    setActiveModal,
+    confirmModal,
+    handleDeleteClick,
     handlePaste: onPaste,
     dbTables,
     localTables,
     handleDbClick,
     selectedIds,
     toggleSelect,
+    toggleSelectAll, // Exportováno pro Sidebar
     handleDeleteSelected,
     handleSaveSelected,
   };

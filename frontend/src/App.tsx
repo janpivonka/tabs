@@ -1,3 +1,4 @@
+// src/App.tsx
 import { Sidebar } from "./components/Sidebar";
 import { TableEditor } from "./components/table/TableEditor";
 import { HistoryPanel } from "./components/history/HistoryPanel";
@@ -17,8 +18,8 @@ export default function App() {
     undo,
     redo,
     handleCreate,
-    handleClone,              // Pro klonování DB tabulek
-    handleImportFromClipboard, // Pro import ze schránky (původní handlePasteText)
+    handleClone,
+    handleImportFromClipboard,
     handleRename,
     handleChangeTable,
     handleDelete,
@@ -37,12 +38,13 @@ export default function App() {
         onRename={handleRename}
         onDelete={handleDelete}
         onDeleteMultiple={handleDeleteMultiple}
-        onPaste={handleImportFromClipboard} // Tlačítko "Importovat data" ve footeru
-        onClone={handleClone}               // Funkce pro klonování z DB tabulek
+        onPaste={handleImportFromClipboard}
+        onClone={handleClone}
         onSaveAll={handleSaveAll}
       />
 
       <div className="flex-1 flex flex-col min-w-0 bg-slate-50/50">
+        {/* HEADER */}
         <div className="h-14 px-6 flex items-center justify-between bg-white border-b border-slate-200">
           <div className="flex items-center gap-2">
             <button onClick={undo} className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-600 active:scale-90" title="Zpět (Ctrl+Z)">
@@ -82,6 +84,7 @@ export default function App() {
           />
         )}
 
+        {/* MAIN CONTENT AREA */}
         <div className="flex-1 overflow-auto">
           {currentTable ? (
             <TableEditor
@@ -90,11 +93,39 @@ export default function App() {
               onUpdate={handleChangeTable}
               onSave={handleSaveTable}
               onExport={() => alert("Exportování dat...")}
+              onCreate={handleCreate}
             />
           ) : (
-            <div className="h-full flex flex-col items-center justify-center text-slate-400">
-              <div className="text-6xl mb-4 opacity-20">📊</div>
-              <p className="text-sm font-medium tracking-tight font-bold">Vyberte tabulku ze seznamu nebo vytvořte novou</p>
+            /* MODERNÍ EMPTY STATE S NAVIGACÍ */
+            <div className="h-full flex flex-col items-center justify-center animate-in fade-in zoom-in duration-500">
+              <div className="w-24 h-24 bg-white rounded-[2.5rem] shadow-sm border border-slate-100 flex items-center justify-center text-4xl mb-6 shadow-slate-200/50">
+                📊
+              </div>
+
+              <h3 className="text-xl font-black text-slate-800 tracking-tight mb-2">
+                Žádná tabulka k zobrazení
+              </h3>
+
+              <p className="text-slate-400 text-sm font-medium mb-8 max-w-[280px] text-center leading-relaxed">
+                Vyberte tabulku ze seznamu vlevo nebo vytvořte úplně novou.
+              </p>
+
+              <button
+                onClick={handleCreate}
+                className="group flex flex-col items-center gap-3 transition-all active:scale-95"
+              >
+                <div className="flex items-center gap-3 bg-white px-6 py-3 rounded-2xl border border-slate-200 shadow-sm group-hover:border-indigo-300 group-hover:shadow-md group-hover:shadow-indigo-50 transition-all">
+                   <span className="w-6 h-6 rounded-full bg-indigo-600 text-white flex items-center justify-center text-lg font-bold">
+                    +
+                   </span>
+                   <span className="text-sm font-black text-slate-700 group-hover:text-indigo-600 transition-colors">
+                     Vytvořit novou tabulku
+                   </span>
+                </div>
+                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] opacity-0 group-hover:opacity-100 transition-opacity">
+                  Klikněte pro rychlý start
+                </span>
+              </button>
             </div>
           )}
         </div>
