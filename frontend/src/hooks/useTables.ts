@@ -1,39 +1,35 @@
+// src/hooks/useTables.ts
 import { useState, useEffect } from "react";
+import { io } from "socket.io-client";
 import type { TableData } from "../lib/storage";
 
 const API_URL = "http://localhost:4000/tables";
+const SOCKET_URL = "http://localhost:4000";
 
 export function useTables() {
   const [tables, setTables] = useState<TableData[]>([]);
 
+  // 1. Prvotní načtení dat při startu aplikace
   useEffect(() => {
     const load = async () => {
-      // 1. Načtení z localStorage (tady jsou i ty smazané, které tam zbyly)
       const localRaw = localStorage.getItem("peony_tables");
       const local: TableData[] = localRaw && localRaw !== "undefined" ? JSON.parse(localRaw) : [];
 
       try {
-        // 2. Načtení z DB (ZDE JE PRAVDA - co tu není, neexistuje)
         const res = await fetch(API_URL);
         const dbTables: TableData[] = await res.json();
 
-        // 3. NOVÉ MERGOVÁNÍ
-        // Začneme čistě s tím, co je v DB
         const merged = [...dbTables];
-
-        // Z localStorage přidáme POUZE tabulky, které jsou dočasné (tmp_)
-        // Tyto tabulky v DB ještě nejsou, takže je chceme zachovat.
         const localTmpTables = local.filter(t => String(t.id).startsWith("tmp_"));
 
         localTmpTables.forEach(tmpT => {
-          // Pro jistotu zkontrolujeme, zda už tam není (neměla by být)
           if (!merged.find(t => t.id === tmpT.id)) {
             merged.push(tmpT);
           }
         });
 
         setTables(merged);
-        saveLocal(merged); // Tímto přepíšeme localStorage a "duchové" zmizí
+        localStorage.setItem("peony_tables", JSON.stringify(merged));
       } catch (err) {
         console.error("Fetch failed, using local backup", err);
         setTables(local);
@@ -43,11 +39,45 @@ export function useTables() {
     load();
   }, []);
 
-  const saveLocal = (ts: TableData[]) => localStorage.setItem("peony_tables", JSON.stringify(ts));
+  // 2. REAL-TIME SYNCHRONIZACE PŘES WEBSOCKETY
+  useEffect(() => {
+    const socket = io(SOCKET_URL);
+
+    socket.on("db_sync_needed", (payload: { operation: string; id: string }) => {
+      console.log("Real-time update přijat:", payload);
+
+      if (payload.operation === "DELETE") {
+        // Okamžitě odstraníme smazanou tabulku ze stavu
+        setTables((prev) => {
+          const next = prev.filter((t) => String(t.id) !== String(payload.id));
+          localStorage.setItem("peony_tables", JSON.stringify(next));
+          return next;
+        });
+      } else {
+        // Pro INSERT nebo UPDATE (např. změna názvu v DB)
+        // je nejjednodušší data znovu přenačíst z API
+        fetch(API_URL)
+          .then((res) => res.json())
+          .then((dbTables) => {
+            setTables((prev) => {
+              // Zachováme lokální dočasné tabulky (tmp_)
+              const tmpOnes = prev.filter(t => String(t.id).startsWith("tmp_"));
+              const merged = [...dbTables, ...tmpOnes];
+              localStorage.setItem("peony_tables", JSON.stringify(merged));
+              return merged;
+            });
+          });
+      }
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, []);
 
   const updateTables = (newTables: TableData[]) => {
     setTables(newTables);
-    saveLocal(newTables);
+    localStorage.setItem("peony_tables", JSON.stringify(newTables));
   };
 
   return { tables, setTables, updateTables };
