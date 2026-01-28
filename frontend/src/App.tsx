@@ -1,4 +1,5 @@
 // src/App.tsx
+import { useEffect } from "react";
 import { Sidebar } from "./components/Sidebar";
 import { TableEditor } from "./components/table/TableEditor";
 import { HistoryPanel } from "./components/history/HistoryPanel";
@@ -17,9 +18,11 @@ export default function App() {
     historyContainerRef,
     undo,
     redo,
+    jumpTo,
     handleCreate,
     handleClone,
     handleImportFromClipboard,
+    handleExportTable, // <--- PROPOJENO (místo alertu)
     handleRename,
     handleChangeTable,
     handleDelete,
@@ -27,6 +30,27 @@ export default function App() {
     handleSaveAll,
     handleSaveTable
   } = useApp();
+
+  /**
+   * KLÁVESOVÉ ZKRATKY
+   * Umožňují rychlou navigaci v historii bez klikání.
+   */
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+Z nebo Cmd+Z
+      if ((e.ctrlKey || e.metaKey) && e.key === "z") {
+        e.preventDefault();
+        undo();
+      }
+      // Ctrl+Y nebo Cmd+Y
+      if ((e.ctrlKey || e.metaKey) && e.key === "y") {
+        e.preventDefault();
+        redo();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [undo, redo]);
 
   return (
     <div className="flex w-full h-screen bg-white font-sans antialiased text-slate-900">
@@ -45,12 +69,20 @@ export default function App() {
 
       <div className="flex-1 flex flex-col min-w-0 bg-slate-50/50">
         {/* HEADER */}
-        <div className="h-14 px-6 flex items-center justify-between bg-white border-b border-slate-200">
+        <div className="h-14 px-6 flex items-center justify-between bg-white border-b border-slate-200 shadow-sm z-10">
           <div className="flex items-center gap-2">
-            <button onClick={undo} className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-600 active:scale-90" title="Zpět (Ctrl+Z)">
+            <button
+              onClick={undo}
+              className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-600 active:scale-90"
+              title="Zpět (Ctrl+Z)"
+            >
               <span className="text-xl">↩</span>
             </button>
-            <button onClick={redo} className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-600 active:scale-90" title="Vpřed (Ctrl+Y)">
+            <button
+              onClick={redo}
+              className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-600 active:scale-90"
+              title="Vpřed (Ctrl+Y)"
+            >
               <span className="text-xl">↪</span>
             </button>
             <div className="w-px h-6 bg-slate-200 mx-2" />
@@ -69,18 +101,25 @@ export default function App() {
 
           <div className="flex items-center gap-4">
             {currentTable && (
-              <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                Režim úprav: <span className="text-slate-900">{currentTable.name}</span>
+              <div className="flex items-center gap-3">
+                <div className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
+                  Pracovní prostor:
+                </div>
+                <div className="px-3 py-1 bg-slate-100 rounded-full text-xs font-bold text-slate-700 border border-slate-200">
+                  {currentTable.name}
+                </div>
               </div>
             )}
           </div>
         </div>
 
+        {/* HISTORY PANEL */}
         {historyVisible && (
           <HistoryPanel
             history={history}
             historyIndex={historyIndex}
             containerRef={historyContainerRef}
+            jumpTo={jumpTo}
           />
         )}
 
@@ -88,28 +127,24 @@ export default function App() {
         <div className="flex-1 overflow-auto">
           {currentTable ? (
             <TableEditor
-              key={currentTable.id}
+              key={currentTable.id} // Klíč zajistí reset vnitřního stavu editoru při přepnutí tabulky
               table={currentTable}
               onUpdate={handleChangeTable}
               onSave={handleSaveTable}
-              onExport={() => alert("Exportování dat...")}
-              onCreate={handleCreate}
+              onExport={handleExportTable} // <--- PROPOJENO s JSON downloadem
             />
           ) : (
-            /* MODERNÍ EMPTY STATE S NAVIGACÍ */
+            /* EMPTY STATE */
             <div className="h-full flex flex-col items-center justify-center animate-in fade-in zoom-in duration-500">
               <div className="w-24 h-24 bg-white rounded-[2.5rem] shadow-sm border border-slate-100 flex items-center justify-center text-4xl mb-6 shadow-slate-200/50">
                 📊
               </div>
-
               <h3 className="text-xl font-black text-slate-800 tracking-tight mb-2">
                 Žádná tabulka k zobrazení
               </h3>
-
               <p className="text-slate-400 text-sm font-medium mb-8 max-w-[280px] text-center leading-relaxed">
-                Vyberte tabulku ze seznamu vlevo nebo vytvořte úplně novou.
+                Vyberte tabulku ze seznamu vlevo nebo vytvořte úplně novou pro zahájení práce.
               </p>
-
               <button
                 onClick={handleCreate}
                 className="group flex flex-col items-center gap-3 transition-all active:scale-95"
@@ -122,9 +157,6 @@ export default function App() {
                      Vytvořit novou tabulku
                    </span>
                 </div>
-                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] opacity-0 group-hover:opacity-100 transition-opacity">
-                  Klikněte pro rychlý start
-                </span>
               </button>
             </div>
           )}

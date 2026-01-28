@@ -1,49 +1,99 @@
-import type { TableAction } from "../../hooks/useApp";
+// src/components/history/HistoryPanel.tsx
+import { useEffect, useRef } from "react";
+import type { HistoryAction, HistoryActionType } from "../../hooks/useHistory";
 
 interface HistoryPanelProps {
-  history: TableAction[];
+  history: HistoryAction[];
   historyIndex: number;
   containerRef: React.RefObject<HTMLDivElement>;
+  jumpTo: (index: number) => void;
 }
 
-export function HistoryPanel({ history, historyIndex, containerRef }: HistoryPanelProps) {
+const getActionStyle = (type: HistoryActionType) => {
+  switch (type) {
+    case "row_add": return { icon: "✨", bg: "bg-emerald-50", label: "Přidání" };
+    case "row_delete": return { icon: "🗑️", bg: "bg-rose-50", label: "Smazání" };
+    case "rename": return { icon: "📝", bg: "bg-amber-50", label: "Přejmenování" };
+    case "cell": return { icon: "✏️", bg: "bg-blue-50", label: "Úprava" };
+    case "sync": return { icon: "☁️", bg: "bg-indigo-50", label: "Cloud Sync" };
+    case "bulk_action": return { icon: "📦", bg: "bg-purple-50", label: "Hromadně" };
+    default: return { icon: "🕒", bg: "bg-slate-50", label: "Akce" };
+  }
+};
+
+export function HistoryPanel({ history, historyIndex, containerRef, jumpTo }: HistoryPanelProps) {
+  const activeItemRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (activeItemRef.current) {
+      activeItemRef.current.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+      });
+    }
+  }, [historyIndex]);
+
   return (
     <div
       ref={containerRef}
-      className="border-b border-slate-200 bg-slate-50/80 backdrop-blur-sm max-h-40 overflow-y-auto flex flex-col transition-all duration-300 scrollbar-thin scrollbar-thumb-slate-200"
+      className="border-b border-slate-200 bg-slate-50/80 backdrop-blur-sm max-h-48 overflow-y-auto flex flex-col transition-all duration-300 scrollbar-thin scrollbar-thumb-slate-300 select-none"
     >
-      {[...history].reverse().map((h, idx) => {
-        const realIdx = history.length - 1 - idx;
-        const isCurrent = realIdx === historyIndex;
+      {history.length === 0 ? (
+        <div className="px-6 py-4 text-[10px] text-slate-400 italic text-center uppercase tracking-widest font-bold">
+          Žádné záznamy
+        </div>
+      ) : (
+        [...history].reverse().map((h, idx) => {
+          const realIdx = history.length - 1 - idx;
+          const isCurrent = realIdx === historyIndex;
+          const isFuture = realIdx > historyIndex;
+          const style = getActionStyle(h.type);
 
-        return (
-          <div
-            key={h.id}
-            ref={isCurrent ? (el) => el && el.scrollIntoView({ behavior: "smooth", block: "center" }) : null}
-            className={`px-6 py-2 flex items-center gap-4 transition-all border-l-4 ${
-              isCurrent
-                ? "bg-white border-indigo-500 text-indigo-900 shadow-sm"
-                : "border-transparent text-slate-600 hover:bg-slate-100/50"
-            }`}
-          >
-            <span className={`text-[10px] font-mono w-16 ${isCurrent ? "text-indigo-500 font-bold" : "text-slate-400"}`}>
-              {new Date(h.timestamp).toLocaleTimeString()}
-            </span>
-
-            <div className={`w-1.5 h-1.5 rounded-full ${isCurrent ? "bg-indigo-500 ring-4 ring-indigo-100" : "bg-slate-300"}`} />
-
-            <span className={`text-xs ${isCurrent ? "font-semibold" : "font-normal"}`}>
-              {h.description}
-            </span>
-
-            {isCurrent && (
-              <span className="ml-auto text-[9px] font-black uppercase tracking-widest text-indigo-400">
-                Active
+          return (
+            <div
+              key={h.id}
+              ref={isCurrent ? activeItemRef : null}
+              onClick={() => jumpTo(realIdx)}
+              className={`px-5 py-1.5 flex items-center gap-3 transition-all cursor-pointer border-l-[3px] relative ${
+                isCurrent
+                  ? "bg-white border-indigo-500 text-indigo-900 shadow-sm z-10"
+                  : isFuture
+                  ? "border-transparent text-slate-300 opacity-60 hover:opacity-100 hover:bg-slate-100"
+                  : "border-transparent text-slate-500 hover:bg-slate-100/80"
+              }`}
+            >
+              {/* ČAS */}
+              <span className={`text-[9px] font-mono w-12 shrink-0 ${isCurrent ? "text-indigo-500 font-bold" : "text-slate-400"}`}>
+                {new Date(h.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
               </span>
-            )}
-          </div>
-        );
-      })}
+
+              {/* MINI IKONA */}
+              <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs shrink-0 transition-transform ${
+                style.bg} ${isFuture ? 'grayscale opacity-50' : ''}`}
+              >
+                {style.icon}
+              </div>
+
+              {/* TEXTY */}
+              <div className="flex flex-col min-w-0 flex-1 leading-tight">
+                <span className={`text-[11px] truncate ${isCurrent ? "font-bold" : "font-medium"}`}>
+                  {h.description}
+                </span>
+                <span className="text-[8px] uppercase tracking-tighter opacity-40 font-bold">
+                  {style.label}
+                </span>
+              </div>
+
+              {/* INDIKÁTOR */}
+              {isCurrent && (
+                <div className="ml-auto flex items-center gap-1 px-1.5 py-0.5 rounded bg-indigo-600 text-[8px] font-black text-white shadow-sm shadow-indigo-200">
+                  NYNÍ
+                </div>
+              )}
+            </div>
+          );
+        })
+      )}
     </div>
   );
 }

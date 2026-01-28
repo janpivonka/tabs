@@ -1,8 +1,8 @@
 // src/components/table/TableItem.tsx
-import type { Table } from "../../domain/table";
+import type { TableData } from "../../lib/storage"; // Opraven import na TableData
 
 interface TableItemProps {
-  table: Table;
+  table: TableData;
   isSelected: boolean;
   onSelect: () => void;
   isMultiSelected?: boolean;
@@ -44,28 +44,28 @@ export function TableItem({
         `}
       >
         <div className="flex items-center gap-2 overflow-hidden flex-1" onClick={onSelect}>
-          
+
           {/* MODERNÍ CUSTOM CHECKBOX */}
           {showCheckbox && toggleSelect && (
-            <div 
-              onClick={(e) => { 
-                e.stopPropagation(); 
-                toggleSelect(table.id); 
+            <div
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleSelect(table.id);
               }}
               className={`
                 shrink-0 w-5 h-5 rounded-lg border-2 transition-all duration-200 flex items-center justify-center
-                ${isMultiSelected 
-                  ? "bg-indigo-600 border-indigo-600 shadow-sm shadow-indigo-200" 
+                ${isMultiSelected
+                  ? "bg-indigo-600 border-indigo-600 shadow-sm shadow-indigo-200"
                   : "bg-white border-slate-200 group-hover:border-indigo-300"
                 }
               `}
             >
               {isMultiSelected && (
-                <svg 
-                  className="w-3.5 h-3.5 text-white animate-in zoom-in duration-200" 
-                  fill="none" 
-                  viewBox="0 0 24 24" 
-                  stroke="currentColor" 
+                <svg
+                  className="w-3.5 h-3.5 text-white animate-in zoom-in duration-200"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
                   strokeWidth="4"
                 >
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -74,25 +74,38 @@ export function TableItem({
             </div>
           )}
 
-          {/* TEČKA PRO DB TABULKY (KDE NENÍ CHECKBOX) */}
+          {/* TEČKA PRO DB TABULKY */}
           {!isRenaming && !showCheckbox && (
             <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isSelected ? "bg-indigo-500" : "bg-slate-300 group-hover:bg-slate-400"}`} />
           )}
 
-          {/* INPUT PRO RENAMING */}
+          {/* INPUT PRO RENAMING S POTVRZOVACÍ IKONOU */}
           {isRenaming && renameValue !== undefined && setRenameValue && commitRename ? (
-            <input
-              autoFocus
-              value={renameValue}
-              onChange={e => setRenameValue(e.target.value)}
-              onBlur={commitRename}
-              onKeyDown={e => {
-                if (e.key === "Enter") commitRename();
-                if (e.key === "Escape") setRenameValue(table.name);
-              }}
-              className="w-full bg-white border border-indigo-300 rounded-md px-2 py-0.5 text-sm outline-none shadow-[0_0_8px_rgba(79,70,229,0.1)]"
-              onClick={(e) => e.stopPropagation()}
-            />
+            <div className="flex items-center gap-1 flex-1 min-w-0" onClick={e => e.stopPropagation()}>
+              <input
+                autoFocus
+                value={renameValue}
+                onChange={e => setRenameValue(e.target.value)}
+                onBlur={commitRename}
+                onKeyDown={e => {
+                  if (e.key === "Enter") commitRename();
+                  if (e.key === "Escape") setRenameValue(table.name);
+                }}
+                className="w-full bg-white border border-indigo-300 rounded-md px-2 py-0.5 text-sm outline-none shadow-[0_0_8px_rgba(79,70,229,0.1)] focus:ring-1 focus:ring-indigo-400"
+              />
+              <button
+                onMouseDown={(e) => {
+                  e.preventDefault(); // Zabrání onBlur na inputu před spuštěním commitu
+                  commitRename();
+                }}
+                className="p-1 text-emerald-600 hover:bg-emerald-50 rounded-md transition-colors"
+                title="Potvrdit"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="3">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              </button>
+            </div>
           ) : (
             <span className={`text-sm tracking-tight truncate ${isSelected ? "font-bold" : "font-medium"}`}>
               {table.name}

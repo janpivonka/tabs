@@ -10,10 +10,6 @@ import { useClipboardPaste } from "./useClipboardPaste";
 /** -------------------- UTIL -------------------- */
 const clone = <T,>(v: T): T => structuredClone(v);
 
-/**
- * Normalizuje data z clipboardu nebo importu:
- * Zajistí přítomnost sloupce ID a doplnění chybějících buněk.
- */
 function normalizeTable(table: TableData): TableData {
   const hasId = table.columns.some(c => c.toLowerCase() === "id");
   const columns = hasId ? table.columns : ["ID", ...table.columns];
@@ -41,6 +37,7 @@ export function useApp() {
     pushHistory,
     undo,
     redo,
+    jumpTo,
   } = useHistory();
 
   const [historyVisible, setHistoryVisible] = useState(false);
@@ -50,7 +47,6 @@ export function useApp() {
 
   /**
    * POMOCNÁ FUNKCE PRO ZÁPIS ZMĚNY
-   * Provede update lokálního stavu a zároveň vytvoří snapshot do historie.
    */
   const commit = (
     description: string,
@@ -62,7 +58,23 @@ export function useApp() {
     pushHistory({ description, type, tableId }, nextTables);
   };
 
-  /** -------------------- IMPORT -------------------- */
+  /**
+   * PŘÍPRAVA DAT PRO DB / EXPORT
+   */
+  const prepareForDb = (table: TableData) => {
+    const dbId = (table as any).originDbId || table.id.replace("tmp_", "").replace("clone:", "");
+
+    return {
+      ...table,
+      id: dbId,
+      name: table.name
+        .replace(" (klon)", "")
+        .replace("_clone_db", "")
+        .trim()
+    };
+  };
+
+  /** -------------------- IMPORT / EXPORT -------------------- */
   const { triggerPaste: handleImportFromClipboard } = useClipboardPaste((tableData: TableData) => {
     const normalized = normalizeTable(tableData);
     const next = [normalized, ...tables];
@@ -75,6 +87,25 @@ export function useApp() {
     );
     setCurrentId(normalized.id);
   });
+
+  function handleExportTable() {
+    if (!currentTable) return;
+
+    const cleanData = prepareForDb(currentTable);
+    const jsonString = JSON.stringify(cleanData, null, 2);
+
+    const blob = new Blob([jsonString], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${cleanData.name.replace(/\s+/g, "_")}.json`;
+    document.body.appendChild(link);
+    link.click();
+
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
 
   /** -------------------- CRUD -------------------- */
   function handleCreate() {
@@ -99,8 +130,10 @@ export function useApp() {
 
   function handleClone(table: TableData) {
     const normalized = normalizeTable(table);
-    // Přidáme prefix pro odlišení klonu
+    const originalDbId = table.id.replace("tmp_", "").replace("clone:", "");
+
     normalized.id = "clone:" + uuid();
+    (normalized as any).originDbId = originalDbId;
     normalized.name = normalized.name + " (klon)";
 
     const next = [normalized, ...tables];
@@ -112,8 +145,10 @@ export function useApp() {
     const prev = tables.find(t => t.id === id);
     if (!prev) return;
 
-    const next = tables.map(t => (t.id === id ? { ...t, name: newName } : t));
-    commit(`Přejmenování "${prev.name}" na "${newName}"`, "rename", id, next);
+    if (prev.name.trim() === newName.trim()) return;
+
+    const next = tables.map(t => (t.id === id ? { ...t, name: newName.trim() } : t));
+    commit(`Přejmenování "${prev.name}" na "${newName.trim()}"`, "rename", id, next);
   }
 
   function handleChangeTable(updated: TableData, description?: string) {
@@ -144,38 +179,22 @@ export function useApp() {
 
   /** -------------------- DB SYNC -------------------- */
   const syncWithState = (syncedTables: TableData[], originalRequestIds: string[]) => {
-    // 1. Odstraníme lokální verze
     let next = tables.filter(t => !originalRequestIds.includes(t.id));
 
-    // 2. Přidáme synchronizované DB verze
     syncedTables.forEach(saved => {
       const idx = next.findIndex(t => t.id === saved.id);
       if (idx > -1) next[idx] = saved;
       else next.push(saved);
     });
 
-    // 3. Uložíme do historie jako bod, kde pískoviště "prořídlo" o syncnuté věci
-    commit(
-      `Synchronizace [${syncedTables.length}] tabulek s DB`,
-      "sync",
-      syncedTables[0]?.id || "sync",
-      next
-    );
-
-    if (syncedTables.length > 0) {
-      setCurrentId(syncedTables[0].id);
-    } else {
-      setCurrentId(null);
-    }
+    commit(`Synchronizace s databází`, "sync", "sync", next);
+    setCurrentId(null);
   };
 
   async function handleSaveTable() {
     if (!currentTable) return;
-    const dataToSend = {
-      ...currentTable,
-      id: currentTable.id.replace("tmp_", "").replace("clone:", ""),
-      name: currentTable.name.replace("_clone_db", ""),
-    };
+    const dataToSend = prepareForDb(currentTable);
+
     try {
       const res = await fetch("http://localhost:4000/tables/sync", {
         method: "POST",
@@ -193,11 +212,7 @@ export function useApp() {
     const idsToSend = ids || tables.map(t => t.id);
     const payload = tables
       .filter(t => idsToSend.includes(t.id))
-      .map(t => ({
-        ...t,
-        id: t.id.replace("tmp_", "").replace("clone:", ""),
-        name: t.name.replace("_clone_db", ""),
-      }));
+      .map(t => prepareForDb(t));
 
     try {
       const res = await fetch("http://localhost:4000/tables/sync", {
@@ -213,13 +228,10 @@ export function useApp() {
   }
 
   return {
-    // Stav tabulek
     tables,
     currentId,
     setCurrentId,
     currentTable,
-
-    // Historie
     history,
     historyIndex,
     historyVisible,
@@ -227,11 +239,11 @@ export function useApp() {
     historyContainerRef,
     undo: () => undo(updateTables, setCurrentId),
     redo: () => redo(updateTables, setCurrentId),
-
-    // Akce
+    jumpTo: (index: number) => jumpTo(index, updateTables, setCurrentId),
     handleCreate,
     handleClone,
     handleImportFromClipboard,
+    handleExportTable,
     handleRename,
     handleChangeTable,
     handleDelete,

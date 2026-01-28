@@ -1,6 +1,6 @@
 // src/components/table/TableEditor.tsx
 import { useState } from "react";
-import type { Table } from "../../domain/table";
+import type { TableData } from "../../lib/storage";
 import { useTableEditor } from "../../hooks/useTableEditor";
 import { ActionModal } from "../common/ActionModal";
 
@@ -10,8 +10,8 @@ export function TableEditor({
   onSave,
   onExport,
 }: {
-  table: Table;
-  onUpdate: (updated: Table, description?: string) => void;
+  table: TableData;
+  onUpdate: (updated: TableData, description?: string) => void;
   onSave: () => void;
   onExport: () => void;
 }) {
@@ -26,7 +26,8 @@ export function TableEditor({
 
   if (!table) return null;
 
-  const normalizedTable: Table = {
+  // Normalizace pro zajištění konzistence dat při renderu
+  const normalizedTable: TableData = {
     ...table,
     rows: table.rows.map((r) => {
       const row: string[] = Array(table.columns.length).fill("");
@@ -72,29 +73,37 @@ export function TableEditor({
     updateCell(rIdx, cIdx, value, desc);
   };
 
-  /** --- HANDLERY PRO MODÁLY --- */
+  /** --- HANDLERY PRO MODÁLY (OPRAVENO) --- */
 
   const handleConfirmAction = () => {
-    if (!activeModal || !selectedCell) return;
+    if (!activeModal) return;
 
-    if (activeModal.type === "delete_row") {
-      const rowId = normalizedTable.rows[selectedCell.row][0];
-      deleteRow(`Smazán řádek č. ${rowId} v tabulce "${table.name}"`);
+    // 1. Akce vyžadující vybranou buňku
+    if (activeModal.type === "delete_row" || activeModal.type === "delete_col") {
+      if (selectedCell) {
+        if (activeModal.type === "delete_row") {
+          const rowId = normalizedTable.rows[selectedCell.row][0];
+          deleteRow(`Smazán řádek č. ${rowId} v tabulce "${table.name}"`);
+        }
+        if (activeModal.type === "delete_col") {
+          const colName = normalizedTable.columns[selectedCell.col];
+          deleteColumn(`Smazán sloupec "${colName}" v tabulce "${table.name}"`);
+        }
+      }
     }
 
-    if (activeModal.type === "delete_col") {
-      const colName = normalizedTable.columns[selectedCell.col];
-      deleteColumn(`Smazán sloupec "${colName}" v tabulce "${table.name}"`);
+    // 2. Akce NEVYŽADUJÍCÍ vybranou buňku (Uložení)
+    if (activeModal.type === "save") {
+      onSave();
     }
 
-    if (activeModal.type === "save") onSave();
     setActiveModal(null);
   };
 
   return (
     <div className="p-6 w-full bg-white flex-1 overflow-auto">
       {/* TOOLBAR */}
-      <div className="mb-6 flex gap-3 flex-wrap items-center bg-slate-50 p-2 rounded-xl border border-slate-200">
+      <div className="mb-6 flex gap-3 flex-wrap items-center bg-slate-50 p-2 rounded-xl border border-slate-200 shadow-sm">
         <div className="flex gap-1 pr-3 border-r border-slate-200">
           <button onClick={() => handleAddRow("above")} className="px-3 py-1.5 hover:bg-white hover:shadow-sm rounded-lg text-xs font-bold text-slate-600 transition-all border border-transparent hover:border-slate-200">
             + Row Above
@@ -115,14 +124,14 @@ export function TableEditor({
 
         <div className="flex gap-1 pr-3 border-r border-slate-200">
           <button
-            onClick={() => selectedCell && setActiveModal({ type: "delete_row", title: "Smazat řádek", description: "Opravdu smazat?" })}
+            onClick={() => selectedCell && setActiveModal({ type: "delete_row", title: "Smazat řádek", description: "Opravdu smazat vybraný řádek?" })}
             disabled={selectedCell === null}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border border-transparent ${selectedCell !== null ? 'hover:bg-red-50 text-red-600 hover:border-red-100' : 'opacity-30 text-slate-400'}`}
           >
             Del Row
           </button>
           <button
-            onClick={() => selectedCell && setActiveModal({ type: "delete_col", title: "Smazat sloupec", description: "Opravdu smazat?" })}
+            onClick={() => selectedCell && setActiveModal({ type: "delete_col", title: "Smazat sloupec", description: "Opravdu smazat vybraný sloupec?" })}
             disabled={selectedCell === null || selectedCell.col === 0}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border border-transparent ${(selectedCell !== null && selectedCell.col !== 0) ? 'hover:bg-red-50 text-red-600 hover:border-red-100' : 'opacity-30 text-slate-400'}`}
           >
@@ -131,16 +140,19 @@ export function TableEditor({
         </div>
 
         <div className="flex gap-2 ml-auto">
-          <button onClick={onExport} className="px-4 py-1.5 bg-white text-slate-600 border border-slate-200 rounded-lg text-xs font-bold hover:bg-slate-50 transition-all shadow-sm">
+          <button onClick={onExport} className="px-4 py-1.5 bg-white text-slate-600 border border-slate-200 rounded-lg text-xs font-bold hover:bg-slate-50 transition-all shadow-sm active:scale-95">
             Export
           </button>
-          <button onClick={() => setActiveModal({ type: "save", title: "Uložit", description: "Uložit změny?" })} className="px-4 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-all shadow-md active:scale-95 flex items-center gap-2">
+          <button
+            onClick={() => setActiveModal({ type: "save", title: "Uložit do DB", description: "Chcete synchronizovat aktuální verzi tabulky s databází?" })}
+            className="px-4 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-all shadow-md active:scale-95 flex items-center gap-2"
+          >
             <span>💾</span> Save Table
           </button>
         </div>
       </div>
 
-      {/* TABLE */}
+      {/* TABLE AREA */}
       <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white">
         <table className="w-full border-collapse">
           <thead>
@@ -201,7 +213,7 @@ export function TableEditor({
                           onKeyDown={e => {
                             if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                           }}
-                          className="w-full bg-transparent px-4 py-2 outline-none text-sm text-slate-700 focus:text-indigo-700"
+                          className="w-full bg-transparent px-4 py-2 outline-none text-sm text-slate-700 focus:text-indigo-700 transition-colors"
                         />
                       )}
                     </td>
@@ -218,7 +230,7 @@ export function TableEditor({
           variant={activeModal.type === "save" ? "info" : "danger"}
           title={activeModal.title}
           description={activeModal.description}
-          confirmLabel={activeModal.type === "save" ? "Odeslat" : "Smazat"}
+          confirmLabel={activeModal.type === "save" ? "Synchronizovat" : "Smazat"}
           onConfirm={handleConfirmAction}
           onCancel={() => setActiveModal(null)}
         />
