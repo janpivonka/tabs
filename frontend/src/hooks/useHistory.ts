@@ -1,155 +1,88 @@
-// useHistory.ts
+// src/hooks/useHistory.ts
 import { useState, useRef, useEffect } from "react";
 import { v4 as uuid } from "uuid";
 import type { TableData } from "../lib/storage";
 
-export type HistoryActionType = "cell" | "row_add" | "row_delete" | "rename";
+export type HistoryActionType = "cell" | "row_add" | "row_delete" | "rename" | "bulk_action" | "sync";
 
-export interface TableAction {
+export interface HistoryAction {
   id: string;
   timestamp: number;
   tableId: string;
   type: HistoryActionType;
   description: string;
-  before: TableData | null;
-  after: TableData | null;
+  snapshot: TableData[]; // Aktuální stav všech LOKÁLNÍCH tabulek
 }
 
-const STORAGE_KEY = "peony_history_v2";
-
+const STORAGE_KEY = "peony_history_v3";
 const clone = <T,>(v: T): T => structuredClone(v);
+const isLocal = (id: string) => id.startsWith("tmp_") || id.startsWith("clone:");
 
 export function useHistory() {
-  const [history, setHistory] = useState<TableAction[]>([]);
+  const [history, setHistory] = useState<HistoryAction[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
-
-  const historyRef = useRef<TableAction[]>([]);
+  const historyRef = useRef<HistoryAction[]>([]);
   const indexRef = useRef(-1);
 
-  useEffect(() => { historyRef.current = history; }, [history]);
-  useEffect(() => { indexRef.current = historyIndex; }, [historyIndex]);
-
-  /** ---------- INIT Z LOCAL STORAGE ---------- */
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) return;
+    historyRef.current = history;
+    indexRef.current = historyIndex;
+  }, [history, historyIndex]);
 
-      setHistory(parsed);
-      setHistoryIndex(parsed.length - 1);
-      indexRef.current = parsed.length - 1;
-    } catch (e) {
-      console.warn("Historie se nepodařila načíst:", e);
+  useEffect(() => {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        setHistory(parsed);
+        setHistoryIndex(parsed.length - 1);
+      } catch (e) { console.error("History load error", e); }
     }
   }, []);
 
-  const persist = (next: TableAction[]) => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  const applyHistoryState = (
+    targetIndex: number,
+    updateTables: (fn: (prev: TableData[]) => TableData[]) => void,
+    setCurrentId: (id: string | null) => void
+  ) => {
+    if (targetIndex < -1 || targetIndex >= historyRef.current.length) return;
+
+    const nextSnapshot = targetIndex === -1 ? [] : clone(historyRef.current[targetIndex].snapshot);
+
+    updateTables(prev => {
+      const dbTables = prev.filter(t => !isLocal(t.id));
+      return [...dbTables, ...nextSnapshot];
+    });
+
+    if (nextSnapshot.length > 0 && targetIndex !== -1) {
+      const action = historyRef.current[targetIndex];
+      setCurrentId(action.tableId.startsWith("multiple") ? nextSnapshot[0].id : action.tableId);
+    }
+
+    setHistoryIndex(targetIndex);
   };
 
-  /** ---------- PUSH AKCE ---------- */
-  const pushHistory = (action: Omit<TableAction, "id" | "timestamp">) => {
-    const entry: TableAction = {
-      ...action,
+  const pushHistory = (params: Omit<HistoryAction, "id" | "timestamp" | "snapshot">, allTables: TableData[]) => {
+    const localSnapshot = allTables.filter(t => isLocal(t.id));
+
+    const entry: HistoryAction = {
+      ...params,
       id: uuid(),
       timestamp: Date.now(),
+      snapshot: clone(localSnapshot)
     };
 
-    const next = [...historyRef.current.slice(0, indexRef.current + 1), entry];
-
-    setHistory(next);
-    setHistoryIndex(next.length - 1);
-    indexRef.current = next.length - 1;
-
-    persist(next);
-  };
-
-  /** ---------- UPDATE ID (clone → db) ---------- */
-  const updateTableIdInHistory = (oldId: string, newId: string) => {
-    const updated = historyRef.current.map(a => ({
-      ...a,
-      tableId: a.tableId === oldId ? newId : a.tableId,
-      before: a.before && a.before.id === oldId ? { ...a.before, id: newId } : a.before,
-      after: a.after && a.after.id === oldId ? { ...a.after, id: newId } : a.after,
-    }));
-
-    setHistory(updated);
-    persist(updated);
-  };
-
-  /** ---------- UNDO ---------- */
-  const undo = (
-    updateTables: (fn: (prev: TableData[]) => TableData[]) => void,
-    setCurrentId: (id: string | null) => void
-  ) => {
-    const i = indexRef.current;
-    if (i < 0) return;
-
-    const action = historyRef.current[i];
-    if (!action) return;
-
-    updateTables(prev => {
-      if (!action.before) {
-        // Undo vytvoření tabulky
-        const next = prev.filter(t => t.id !== action.tableId);
-        setCurrentId(next[0]?.id || null);
-        return next;
-      }
-
-      const exists = prev.some(t => t.id === action.tableId);
-      const next = exists
-        ? prev.map(t => (t.id === action.tableId ? clone(action.before!) : t))
-        : [clone(action.before!), ...prev];
-
-      setCurrentId(action.before!.id);
-      return next;
-    });
-
-    const nextIdx = i - 1;
-    setHistoryIndex(nextIdx);
-    indexRef.current = nextIdx;
-  };
-
-  /** ---------- REDO ---------- */
-  const redo = (
-    updateTables: (fn: (prev: TableData[]) => TableData[]) => void,
-    setCurrentId: (id: string | null) => void
-  ) => {
-    const nextIdx = indexRef.current + 1;
-    if (nextIdx >= historyRef.current.length) return;
-
-    const action = historyRef.current[nextIdx];
-    if (!action) return;
-
-    updateTables(prev => {
-      if (!action.after) {
-        // Redo smazání tabulky
-        const next = prev.filter(t => t.id !== action.tableId);
-        setCurrentId(next[0]?.id || null);
-        return next;
-      }
-
-      const exists = prev.some(t => t.id === action.tableId);
-      const next = exists
-        ? prev.map(t => (t.id === action.tableId ? clone(action.after!) : t))
-        : [clone(action.after!), ...prev];
-
-      setCurrentId(action.after!.id);
-      return next;
-    });
-
-    setHistoryIndex(nextIdx);
-    indexRef.current = nextIdx;
+    const nextHistory = [...historyRef.current.slice(0, indexRef.current + 1), entry];
+    setHistory(nextHistory);
+    setHistoryIndex(nextHistory.length - 1);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(nextHistory));
   };
 
   return {
     history,
     historyIndex,
     pushHistory,
-    undo,
-    redo,
-    updateTableIdInHistory,
+    undo: (u: any, s: any) => applyHistoryState(indexRef.current - 1, u, s),
+    redo: (u: any, s: any) => applyHistoryState(indexRef.current + 1, u, s),
   };
 }

@@ -4,12 +4,16 @@ import { v4 as uuid } from "uuid";
 import type { TableData } from "../lib/storage";
 
 import { useTables } from "./useTables";
-import { useHistory } from "./useHistory";
+import { useHistory, HistoryActionType } from "./useHistory";
 import { useClipboardPaste } from "./useClipboardPaste";
 
 /** -------------------- UTIL -------------------- */
 const clone = <T,>(v: T): T => structuredClone(v);
 
+/**
+ * Normalizuje data z clipboardu nebo importu:
+ * Zajistí přítomnost sloupce ID a doplnění chybějících buněk.
+ */
 function normalizeTable(table: TableData): TableData {
   const hasId = table.columns.some(c => c.toLowerCase() === "id");
   const columns = hasId ? table.columns : ["ID", ...table.columns];
@@ -37,7 +41,6 @@ export function useApp() {
     pushHistory,
     undo,
     redo,
-    updateTableIdInHistory,
   } = useHistory();
 
   const [historyVisible, setHistoryVisible] = useState(false);
@@ -45,21 +48,31 @@ export function useApp() {
 
   const currentTable = tables.find(t => t.id === currentId) || null;
 
-  /** * CLIPBOARD LOGIKA
-   * Zde byla chyba: vytahujeme 'triggerPaste' z hooku a přejmenováváme na 'handleImportFromClipboard'
+  /**
+   * POMOCNÁ FUNKCE PRO ZÁPIS ZMĚNY
+   * Provede update lokálního stavu a zároveň vytvoří snapshot do historie.
    */
+  const commit = (
+    description: string,
+    type: HistoryActionType,
+    tableId: string,
+    nextTables: TableData[]
+  ) => {
+    updateTables(nextTables);
+    pushHistory({ description, type, tableId }, nextTables);
+  };
+
+  /** -------------------- IMPORT -------------------- */
   const { triggerPaste: handleImportFromClipboard } = useClipboardPaste((tableData: TableData) => {
     const normalized = normalizeTable(tableData);
+    const next = [normalized, ...tables];
 
-    pushHistory({
-      tableId: normalized.id,
-      type: "row_add",
-      description: `Import dat ze schránky`,
-      before: null,
-      after: clone(normalized),
-    });
-
-    updateTables([normalized, ...tables]);
+    commit(
+      `Import dat do tabulky "${normalized.name}"`,
+      "row_add",
+      normalized.id,
+      next
+    );
     setCurrentId(normalized.id);
   });
 
@@ -68,7 +81,6 @@ export function useApp() {
     const base = "Nová tabulka";
     let name = base;
     let i = 2;
-
     while (tables.some(t => t.name.toLowerCase() === name.toLowerCase())) {
       name = `${base} ${i++}`;
     }
@@ -77,37 +89,22 @@ export function useApp() {
       id: "tmp_" + uuid(),
       name,
       columns: ["ID", "Název", "Vlastnost 1", "Vlastnost 2"],
-      rows: [
-        ["1", "Příklad dat", "", ""],
-        ["2", "", "", ""],
-      ],
+      rows: [["1", "Příklad dat", "", ""], ["2", "", "", ""]],
     };
 
-    pushHistory({
-      tableId: table.id,
-      type: "row_add",
-      description: `Vytvoření tabulky "${name}"`,
-      before: null,
-      after: clone(table),
-    });
-
-    updateTables([table, ...tables]);
+    const next = [table, ...tables];
+    commit(`Vytvoření tabulky "${name}"`, "row_add", table.id, next);
     setCurrentId(table.id);
   }
 
-  // Funkce pro přímé klonování (bez použití schránky)
   function handleClone(table: TableData) {
     const normalized = normalizeTable(table);
+    // Přidáme prefix pro odlišení klonu
+    normalized.id = "clone:" + uuid();
+    normalized.name = normalized.name + " (klon)";
 
-    pushHistory({
-      tableId: normalized.id,
-      type: "row_add",
-      description: `Klonování tabulky "${normalized.name}"`,
-      before: null,
-      after: clone(normalized),
-    });
-
-    updateTables([normalized, ...tables]);
+    const next = [normalized, ...tables];
+    commit(`Klonování tabulky "${table.name}"`, "row_add", normalized.id, next);
     setCurrentId(normalized.id);
   }
 
@@ -115,34 +112,15 @@ export function useApp() {
     const prev = tables.find(t => t.id === id);
     if (!prev) return;
 
-    const next = { ...prev, name: newName };
-
-    pushHistory({
-      tableId: id,
-      type: "rename",
-      description: `Přejmenování na "${newName}"`,
-      before: clone(prev),
-      after: clone(next),
-    });
-
-    updateTables(tables.map(t => (t.id === id ? next : t)));
+    const next = tables.map(t => (t.id === id ? { ...t, name: newName } : t));
+    commit(`Přejmenování "${prev.name}" na "${newName}"`, "rename", id, next);
   }
 
   function handleChangeTable(updated: TableData, description?: string) {
     if (!description) return;
+    const next = tables.map(t => (t.id === updated.id ? updated : t));
 
-    const prev = tables.find(t => t.id === updated.id);
-    if (!prev) return;
-
-    pushHistory({
-      tableId: updated.id,
-      type: "cell",
-      description,
-      before: clone(prev),
-      after: clone(updated),
-    });
-
-    updateTables(tables.map(t => (t.id === updated.id ? updated : t)));
+    commit(description, "cell", updated.id, next);
     setCurrentId(updated.id);
   }
 
@@ -151,58 +129,51 @@ export function useApp() {
     const prev = tables.find(t => t.id === id);
     if (!prev) return;
 
-    pushHistory({
-      tableId: id,
-      type: "row_delete",
-      description: `Smazání tabulky "${prev.name}"`,
-      before: clone(prev),
-      after: null,
-    });
+    const next = tables.filter(t => t.id !== id);
+    commit(`Smazání tabulky "${prev.name}"`, "row_delete", id, next);
 
-    updateTables(tables.filter(t => t.id !== id));
     if (currentId === id) setCurrentId(null);
   }
 
   function handleDeleteMultiple(ids: string[]) {
-    const remaining = tables.filter(t => !ids.includes(t.id));
+    const next = tables.filter(t => !ids.includes(t.id));
+    commit(`Hromadné smazání [${ids.length}] tabulek`, "bulk_action", "multiple", next);
 
-    ids.forEach(id => {
-      const prev = tables.find(t => t.id === id);
-      if (!prev) return;
-
-      pushHistory({
-        tableId: id,
-        type: "row_delete",
-        description: `Smazání tabulky "${prev.name}"`,
-        before: clone(prev),
-        after: null,
-      });
-    });
-
-    updateTables(remaining);
     if (currentId && ids.includes(currentId)) setCurrentId(null);
   }
 
   /** -------------------- DB SYNC -------------------- */
   const syncWithState = (syncedTables: TableData[], originalRequestIds: string[]) => {
-    let next = [...tables];
-    syncedTables.forEach((saved, i) => {
-      const reqId = originalRequestIds[i];
-      if (reqId !== saved.id) updateTableIdInHistory(reqId, saved.id);
-      next = next.filter(t => t.id !== reqId);
+    // 1. Odstraníme lokální verze
+    let next = tables.filter(t => !originalRequestIds.includes(t.id));
+
+    // 2. Přidáme synchronizované DB verze
+    syncedTables.forEach(saved => {
       const idx = next.findIndex(t => t.id === saved.id);
       if (idx > -1) next[idx] = saved;
       else next.push(saved);
     });
-    updateTables(next);
-    if (syncedTables.length === 1) setCurrentId(syncedTables[0].id);
+
+    // 3. Uložíme do historie jako bod, kde pískoviště "prořídlo" o syncnuté věci
+    commit(
+      `Synchronizace [${syncedTables.length}] tabulek s DB`,
+      "sync",
+      syncedTables[0]?.id || "sync",
+      next
+    );
+
+    if (syncedTables.length > 0) {
+      setCurrentId(syncedTables[0].id);
+    } else {
+      setCurrentId(null);
+    }
   };
 
   async function handleSaveTable() {
     if (!currentTable) return;
     const dataToSend = {
       ...currentTable,
-      id: currentTable.id.replace("clone:", ""),
+      id: currentTable.id.replace("tmp_", "").replace("clone:", ""),
       name: currentTable.name.replace("_clone_db", ""),
     };
     try {
@@ -224,7 +195,7 @@ export function useApp() {
       .filter(t => idsToSend.includes(t.id))
       .map(t => ({
         ...t,
-        id: t.id.replace("clone:", ""),
+        id: t.id.replace("tmp_", "").replace("clone:", ""),
         name: t.name.replace("_clone_db", ""),
       }));
 
@@ -241,26 +212,26 @@ export function useApp() {
     }
   }
 
-  /** -------------------- RETURN -------------------- */
   return {
+    // Stav tabulek
     tables,
     currentId,
     setCurrentId,
     currentTable,
 
+    // Historie
     history,
     historyIndex,
     historyVisible,
     setHistoryVisible,
     historyContainerRef,
-
     undo: () => undo(updateTables, setCurrentId),
     redo: () => redo(updateTables, setCurrentId),
 
+    // Akce
     handleCreate,
     handleClone,
-    handleImportFromClipboard, // Exportujeme opravenou funkci pro App.tsx
-
+    handleImportFromClipboard,
     handleRename,
     handleChangeTable,
     handleDelete,
