@@ -7,6 +7,11 @@ import { useTables } from "./useTables";
 import { useHistory, HistoryActionType } from "./useHistory";
 import { useClipboardPaste } from "./useClipboardPaste";
 
+/** -------------------- CONFIG -------------------- */
+// Použije adresu z Vercel Environment Variables, nebo defaultní Render URL
+const BASE_URL = import.meta.env.VITE_API_URL || "https://peony-tabs.onrender.com";
+const SYNC_URL = `${BASE_URL}/tables/sync`;
+
 /** -------------------- UTIL -------------------- */
 const clone = <T,>(v: T): T => structuredClone(v);
 
@@ -181,36 +186,26 @@ export function useApp() {
 
   /** -------------------- DB SYNC -------------------- */
   const syncWithState = (syncedTables: TableData[], originalRequestIds: string[]) => {
-    // Vytvoříme pracovní kopii aktuálních tabulek
     let next = [...tables];
 
-    // Iterujeme přes tabulky, které se vrátily ze serveru
     syncedTables.forEach((synced, index) => {
       const originalId = originalRequestIds[index];
-
-      // Hledáme, kde v našem seznamu tato tabulka sedí
       const existingIdx = next.findIndex(t => t.id === originalId);
 
       if (existingIdx > -1) {
-        // Pokud jsme ji našli, nahradíme ji novou verzí (už má DB ID)
         next[existingIdx] = synced;
       } else {
-        // Pokud ID nesouhlasí (už se jednou syncovala), zkusíme ji najít podle DB ID
         const dbIdx = next.findIndex(t => t.id === synced.id);
         if (dbIdx > -1) {
           next[dbIdx] = synced;
         } else {
-          // Pokud je úplně nová, přidáme ji na začátek
           next.unshift(synced);
         }
       }
     });
 
-    // Tímto přístupem jsme v 'next' ponechali vše, co tam bylo (klony, jiné tabulky),
-    // a pouze aktualizovali ty, které se reálně synchronizovaly.
     commit(`[System] Remote Sync Completed`, "sync", "sync", next);
 
-    // Resetujeme currentId jen pokud už v seznamu neexistuje
     if (currentId && !next.some(t => t.id === currentId)) {
         setCurrentId(null);
     }
@@ -221,7 +216,8 @@ export function useApp() {
     const dataToSend = prepareForDb(currentTable);
 
     try {
-      const res = await fetch("http://localhost:4000/tables/sync", {
+      console.log(`📤 Synchronizuji tabulku na: ${SYNC_URL}`);
+      const res = await fetch(SYNC_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tables: [dataToSend] }),
@@ -233,7 +229,7 @@ export function useApp() {
       }
       return false;
     } catch (err) {
-      console.error("Save error:", err);
+      console.error("❌ Save error:", err);
       return false;
     }
   }
@@ -248,7 +244,8 @@ export function useApp() {
     if (payload.length === 0) return false;
 
     try {
-      const res = await fetch("http://localhost:4000/tables/sync", {
+      console.log(`📤 Hromadná synchronizace na: ${SYNC_URL}`);
+      const res = await fetch(SYNC_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tables: payload }),
@@ -259,7 +256,8 @@ export function useApp() {
         return true;
       }
       return false;
-    } catch {
+    } catch (err) {
+      console.error("❌ Bulk save error:", err);
       return false;
     }
   }
