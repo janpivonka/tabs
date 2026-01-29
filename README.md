@@ -1,129 +1,123 @@
-# 📊 Tabs – Full-Stack Application for Tabular Data Management
+# 📊 Peony Tabs – High-Performance Full-Stack Data Manager
 
-[![Vercel](https://img.shields.io/badge/Vercel-000000?style=for-the-badge\&logo=vercel\&logoColor=white)](https://tabs-orcin-five.vercel.app/)
-[![Railway](https://img.shields.io/badge/Railway-0B0D0E?style=for-the-badge\&logo=railway\&logoColor=white)](https://tabs-production.up.railway.app/)
+[![Vercel](https://img.shields.io/badge/Vercel-000000?style=for-the-badge\&logo=vercel\&logoColor=white)](https://tabs-pnzn50m56-jan-pivonkas-projects.vercel.app/)
+[![Render](https://img.shields.io/badge/Render-000000?style=for-the-badge\&logo=render\&logoColor=white)](https://peony-tabs.onrender.com)
 [![React](https://img.shields.io/badge/React-20232A?style=for-the-badge\&logo=react\&logoColor=61DAFB)](https://reactjs.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-339933?style=for-the-badge\&logo=node.js\&logoColor=white)](https://nodejs.org/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-316192?style=for-the-badge\&logo=postgresql\&logoColor=white)](https://www.postgresql.org/)
 
 ---
 
-## 📝 Context and Project Goal
+## 📝 Project Vision & Goal
 
-Tabs is a **full-stack web application** designed for managing structured tabular data with a strong focus on:
+Peony Tabs is a **production-ready full-stack web application** for managing structured tabular data, with a strong emphasis on:
 
-* change history handling,
-* undo / redo mechanics,
-* and strict separation of domain logic from the UI layer.
+* instant persistence between UI and database,
+* non-destructive editing via time-travel history,
+* and strict separation of domain logic from the presentation layer.
 
-The project serves as a practical demonstration of designing a modern full-stack application that combines a robust backend API with a highly interactive frontend.
+The project evolved from a functional prototype into a robust system designed to reflect **real-world application architecture**, predictable state management, and scalable frontend–backend integration.
 
-The primary goal was to demonstrate:
+The primary goal of the project is to demonstrate:
 
 * system-oriented and domain-driven thinking,
-* predictable state management,
-* real-world frontend-to-database integration.
+* advanced client-side state orchestration,
+* real-time data synchronization backed by PostgreSQL.
 
 ---
 
 ## 🚀 Live Demo
 
 **Frontend (Vercel):**
-👉 [https://tabs-orcin-five.vercel.app/](https://tabs-orcin-five.vercel.app/)
+👉 [https://tabs-pnzn50m56-jan-pivonkas-projects.vercel.app/](https://tabs-pnzn50m56-jan-pivonkas-projects.vercel.app/)
 
-**Backend API (Railway):**
-👉 [https://tabs-production.up.railway.app/](https://tabs-production.up.railway.app/)
+**Backend API (Render):**
+👉 [https://peony-tabs.onrender.com](https://peony-tabs.onrender.com)
+
+---
+
+## ✨ Key Features & Enhancements
+
+### 🕒 Advanced Time-Travel History
+
+* **Undo / Redo Engine** – fully operational snapshot-based history system
+* **Interactive Timeline** – one-click restoration of any previous application state
+* **Contextual Descriptions** – human-readable logs for every mutation (e.g. `[Inventory] Attribute Added`)
+
+### 🗂️ Professional Sidebar & Bulk Actions
+
+* **Database Sync Indicators** – real-time visibility of persistence state
+* **Multi-Select Operations** – batch cloning and deletion of tables
+* **Dynamic Navigation** – instant switching between local drafts and database-backed tables
+
+### ✍️ Intelligent Table Editor
+
+* **Export Engine** – one-click JSON export of sanitized domain data
+* **Smart Clipboard** – copy & paste with automatic row/column normalization
+* **Safe Mutations** – confirmation modals and strict state validation
+
+### 🎨 Polished UI / UX
+
+* **Modern Design** – clean, professional interface built for power users
+* **Fluid Feedback** – micro-animations for state transitions and async operations
+* **Localization** – fully English interface for global accessibility
 
 ---
 
 ## 🏗️ Application Architecture
 
-The project is split into a **dedicated frontend and backend**, each with clearly defined responsibilities and a production-ready structure.
+The application is split into a **dedicated frontend and backend**, each with clearly defined responsibilities and a production-grade structure.
 
-### 🔹 Backend
+### 🔹 Backend (Node.js + TypeScript)
 
-The backend is implemented using **Node.js + TypeScript** and designed according to layered architecture principles.
+The backend follows a layered architecture designed for scalability and maintainability.
 
 **Backend characteristics:**
 
-* **Controller → Service → Repository** architecture
+* **Controller → Service → Repository** pattern
 * **Prisma ORM** for type-safe database access
-* **PostgreSQL** as the persistence layer
-* centralized error handling and validation layer
+* **PostgreSQL** as the primary persistence layer
+* **Real-time layer** using PostgreSQL triggers and Socket.io
+* centralized validation and error-handling mechanisms
 
-Each domain module (e.g. `table`) encapsulates its own:
+Each domain module encapsulates its own:
 
 * routes
 * controllers
 * services
 * repositories
-* validators
 
-This structure allows the backend to scale naturally as additional domains are introduced.
+---
 
-### 🔹 Frontend
+### 🔹 Frontend (React + TypeScript)
 
-The frontend is built with **React + TypeScript** with a strong emphasis on **logic–UI decoupling**.
+The frontend is built with a strong focus on **logic–UI decoupling** and predictable state transitions.
 
 Core principles:
 
-* feature-first component structure
-* application logic extracted into custom hooks (`useApp`, `useHistory`, `useTables`, …)
+* feature-first component organization
+* application logic extracted into custom hooks (`useApp`, `useHistory`, `useTables`)
 * UI components focused primarily on rendering
-* predictable state transitions, even for complex operations
+* hybrid persistence between LocalStorage and remote database
 
-A significant part of the application is dedicated to **change history management**, enabling undo / redo operations for tabular data mutations.
+A significant part of the frontend is dedicated to **history orchestration**, enabling safe undo / redo operations across all table mutations.
 
-Styling is implemented using **Tailwind CSS**, enabling fast UI iteration while maintaining visual consistency.
-
----
-
-## ✨ Key Features
-
-* **Table Editor** – creating, editing, renaming, and deleting tables
-* **Undo / Redo Engine** – snapshot-based change history
-* **Clipboard Integration** – currently **not functional**, prepared for future implementation
-* **Sidebar Navigation** – structured table management with contextual actions
-* **Safe Destructive Actions** – confirmation modals for delete operations
-* **Desktop SPA** – application designed primarily for desktop usage
+Styling is implemented using **Tailwind CSS**, allowing rapid UI iteration while maintaining visual consistency.
 
 ---
 
-## ⚠️ Current State and Limitations
+## 📈 Roadmap & Future Improvements
 
-The application is currently in a functional prototype phase with a clearly defined direction for further development:
+While the application is fully usable, the following features are planned for future iterations:
 
-* **The frontend currently operates in read-only mode**, consuming data from the database
-* **API endpoints for data persistence** are implemented on the backend but **are not yet connected to the frontend**
-* **Clipboard paste functionality** is currently **non-functional** and requires a dedicated implementation
-* **History navigation** will be extended with `onClick` interactions for individual snapshot entries
+* **Authentication & RBAC**
 
-These limitations are intentional and reflect an iterative development approach.
-
----
-
-## 🛠️ Tech Stack
-
-### Frontend
-
-* React 18
-* TypeScript
-* Vite
-* Tailwind CSS
-
-### Backend
-
-* Node.js
-* TypeScript
-* Express
-* Prisma ORM
-* PostgreSQL
-
-### Infrastructure
-
-* **Frontend hosting:** Vercel
-* **Backend hosting:** Railway
-* **Database:** PostgreSQL
+  * Free user – read-only access
+  * Standard user – full CRUD on owned tables
+  * Superuser – global administrative control
+* **Multi-user collaboration** – real-time presence indicators
+* **Advanced cell types** – dropdowns, dates, and media support
+* **Optimistic UI updates** for enhanced perceived performance
 
 ---
 
@@ -131,21 +125,8 @@ These limitations are intentional and reflect an iterative development approach.
 
 ```text
 tabs/
-├─ backend/
-│  ├─ src/
-│  │  ├─ modules/        # Domain modules (controller, service, repository)
-│  │  └─ shared/         # Middleware, errors, Prisma client
-│  ├─ prisma/            # Prisma schema and migrations
-│  └─ server.ts          # Application entry point
-│
-├─ frontend/
-│  ├─ src/
-│  │  ├─ components/     # UI components (tables, sidebar, history)
-│  │  ├─ hooks/          # Application and domain logic
-│  │  ├─ domain/         # Shared domain models
-│  │  └─ lib/            # Utilities and storage
-│  └─ main.tsx
-│
+├─ backend/             # Node.js + Prisma + Socket.io
+├─ frontend/            # React + Tailwind + Vite
 └─ README.md
 ```
 
@@ -153,58 +134,21 @@ tabs/
 
 ## 📸 Screenshots
 
-### Database-backed table
+### Home Page
 
-![Database Table](frontend/src/assets/images/screenshots/app-database-tab.png)
+![Home page](frontend/src/assets/images/screenshots/peony_tabs-home.png)
 
-### Change history (Undo)
+### Table Clicked
 
-![History Undo](frontend/src/assets/images/screenshots/app-history-undo.png)
+![Table Clicked](frontend/src/assets/images/screenshots/peony_tabs-table.png)
 
-### Local table
+### History
 
-![Local Table](frontend/src/assets/images/screenshots/app-local-tab.png)
-
----
-
-## ⚙️ Local Development
-
-### Backend
-
-```bash
-cd backend
-npm install
-npm run dev
-```
-
-### Frontend
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
----
-
-## 📈 Roadmap and Future Improvements
-
-* **Connecting frontend write operations to backend API** for full database persistence
-* **Clipboard engine implementation** (validation, cell mapping, edge cases)
-* **Interactive change history** – clickable snapshots with instant state restoration
-* **User roles and permissions**:
-
-  * administrator (full database access)
-  * standard user (partial access)
-  * read-only mode
-* **Authentication and authorization**
-* **Collaborative editing (multi-user support)**
-* **Optimistic UI updates**
+![History](frontend/src/assets/images/screenshots/peony_tabs-history.png)
 
 ---
 
 ## 👤 Author
 
 **Peony 🌸**
-
-GitHub: [https://github.com/peony](https://github.com/peony)
+Visionary of Connections...
