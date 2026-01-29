@@ -1,15 +1,25 @@
 import { tableRepository } from "./table.repository.js";
 import { NotFoundError } from "../../shared/errors/NotFoundError.js";
 
+// Definujeme si rozhraní pro strukturu dat v JSONu
+interface TableJsonData {
+  columns?: any[];
+  rows?: any[];
+}
+
 export const tableService = {
   getAll: async () => {
     const tables = await tableRepository.findAll();
-    return tables.map(t => ({
-      id: t.id,
-      name: t.name || "Unnamed Table",
-      columns: t.data?.columns || [],
-      rows: t.data?.rows || []
-    }));
+    return tables.map(t => {
+      // Přetypujeme t.data na naše rozhraní
+      const tableData = t.data as unknown as TableJsonData;
+      return {
+        id: t.id,
+        name: t.name || "Unnamed Table",
+        columns: tableData?.columns || [],
+        rows: tableData?.rows || []
+      };
+    });
   },
 
   create: async (data: { name: string; data: any }) => {
@@ -36,7 +46,6 @@ export const tableService = {
   },
 
   sync: async (tables: any[]) => {
-    // fallback pro name a columns/rows před uložením
     const sanitizedTables = tables.map(t => ({
       ...t,
       name: t.name && t.name.trim() ? t.name : "Unnamed Table",
@@ -46,11 +55,15 @@ export const tableService = {
 
     const synced = await tableRepository.sync(sanitizedTables);
 
-    return synced.map(t => ({
-      id: t.id,
-      name: t.name || "Unnamed Table",
-      columns: t.data?.columns || [],
-      rows: t.data?.rows || []
-    }));
+    return synced.map(t => {
+      // Opět přetypujeme t.data pro návratovou hodnotu
+      const tableData = t.data as unknown as TableJsonData;
+      return {
+        id: t.id,
+        name: t.name || "Unnamed Table",
+        columns: tableData?.columns || [],
+        rows: tableData?.rows || []
+      };
+    });
   }
 };
