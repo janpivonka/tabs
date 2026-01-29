@@ -9,11 +9,13 @@ export function TableEditor({
   onUpdate,
   onSave,
   onExport,
+  isSyncing,
 }: {
   table: TableData;
   onUpdate: (updated: TableData, description?: string) => void;
   onSave: () => void;
   onExport: () => void;
+  isSyncing?: boolean;
 }) {
   const [activeModal, setActiveModal] = useState<{
     type: "delete_row" | "delete_col" | "save";
@@ -21,12 +23,12 @@ export function TableEditor({
     description: string | React.ReactNode;
   } | null>(null);
 
-  // Lokální stav pro plynulé psaní (r: -1 značí hlavičku/sloupce)
   const [editingValue, setEditingValue] = useState<{ r: number; c: number; val: string } | null>(null);
+  const [purgingRow, setPurgingRow] = useState<number | null>(null);
+  const [purgingCol, setPurgingCol] = useState<number | null>(null);
 
   if (!table) return null;
 
-  // Normalizace pro zajištění konzistence dat při renderu
   const normalizedTable: TableData = {
     ...table,
     rows: table.rows.map((r) => {
@@ -50,179 +52,245 @@ export function TableEditor({
     deleteColumn,
   } = useTableEditor(normalizedTable, onUpdate);
 
-  /** --- POMOCNÉ FUNKCE PRO TEXTY HISTORIE --- */
-
-  const handleAddRow = (pos: "above" | "below") => {
-    const desc = selectedCell
-      ? `Přidán řádek ${pos === "above" ? "nad" : "pod"} řádek č. ${selectedCell.row + 1} v tabulce "${table.name}"`
-      : `Přidán řádek na ${pos === "above" ? "začátek" : "konec"} tabulky "${table.name}"`;
-    addRow(pos, desc);
-  };
-
-  const handleAddCol = (pos: "before" | "after") => {
-    const desc = selectedCell
-      ? `Přidán sloupec ${pos === "before" ? "vlevo" : "vpravo"} od sloupce "${table.columns[selectedCell.col]}" v tabulce "${table.name}"`
-      : `Přidán sloupec na ${pos === "before" ? "začátek" : "konec"} tabulky "${table.name}"`;
-    addColumn(pos, desc);
-  };
-
   const handleCellChange = (rIdx: number, cIdx: number, value: string) => {
-    const colName = normalizedTable.columns[cIdx];
-    const rowId = normalizedTable.rows[rIdx][0];
-    const desc = `Změna dat v [řádek ${rowId}, ${colName}] v tabulce "${table.name}"`;
-    updateCell(rIdx, cIdx, value, desc);
+    updateCell(rIdx, cIdx, value); // Popis si bere hook automaticky
   };
-
-  /** --- HANDLERY PRO MODÁLY (OPRAVENO) --- */
 
   const handleConfirmAction = () => {
     if (!activeModal) return;
 
-    // 1. Akce vyžadující vybranou buňku
-    if (activeModal.type === "delete_row" || activeModal.type === "delete_col") {
-      if (selectedCell) {
-        if (activeModal.type === "delete_row") {
-          const rowId = normalizedTable.rows[selectedCell.row][0];
-          deleteRow(`Smazán řádek č. ${rowId} v tabulce "${table.name}"`);
-        }
-        if (activeModal.type === "delete_col") {
-          const colName = normalizedTable.columns[selectedCell.col];
-          deleteColumn(`Smazán sloupec "${colName}" v tabulce "${table.name}"`);
-        }
-      }
-    }
-
-    // 2. Akce NEVYŽADUJÍCÍ vybranou buňku (Uložení)
     if (activeModal.type === "save") {
       onSave();
+    } else if (activeModal.type === "delete_row") {
+      if (selectedCell) {
+        setPurgingRow(selectedCell.row);
+        setTimeout(() => {
+          deleteRow();
+          setPurgingRow(null);
+          setSelectedCell(null);
+        }, 400);
+      }
+    } else if (activeModal.type === "delete_col") {
+      if (selectedCell) {
+        setPurgingCol(selectedCell.col);
+        setTimeout(() => {
+          deleteColumn();
+          setPurgingCol(null);
+          setSelectedCell(null);
+        }, 400);
+      }
     }
 
     setActiveModal(null);
   };
 
   return (
-    <div className="p-6 w-full bg-white flex-1 overflow-auto">
-      {/* TOOLBAR */}
-      <div className="mb-6 flex gap-3 flex-wrap items-center bg-slate-50 p-2 rounded-xl border border-slate-200 shadow-sm">
-        <div className="flex gap-1 pr-3 border-r border-slate-200">
-          <button onClick={() => handleAddRow("above")} className="px-3 py-1.5 hover:bg-white hover:shadow-sm rounded-lg text-xs font-bold text-slate-600 transition-all border border-transparent hover:border-slate-200">
-            + Row Above
-          </button>
-          <button onClick={() => handleAddRow("below")} className="px-3 py-1.5 hover:bg-white hover:shadow-sm rounded-lg text-xs font-bold text-slate-600 transition-all border border-transparent hover:border-slate-200">
-            + Row Below
-          </button>
+    <div className={`p-8 w-full min-h-full flex flex-col relative z-10 transition-all duration-700 ${isSyncing ? 'scale-[0.99] blur-[0.5px]' : ''}`}>
+
+      <style>{`
+        @keyframes peony-reveal {
+          0% { opacity: 0; transform: translateY(40px) scale(0.95); filter: blur(15px); }
+          100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+        }
+        @keyframes peony-row-in {
+          0% { opacity: 0; transform: scaleY(0.7); filter: blur(10px); background: rgba(168, 85, 247, 0.05); }
+          100% { opacity: 1; transform: scaleY(1); filter: blur(0); background: transparent; }
+        }
+        @keyframes peony-exit {
+          0% { opacity: 1; transform: scale(1); filter: blur(0); }
+          100% { opacity: 0; transform: scale(0.9) translateY(-10px); filter: blur(12px); }
+        }
+        @keyframes shimmer-sweep {
+          0% { transform: translateX(-150%) skewX(-25deg); }
+          100% { transform: translateX(150%) skewX(-25deg); }
+        }
+        @keyframes star-twinkle {
+          0%, 100% { opacity: 0.3; transform: scale(0.8) rotate(0deg); }
+          50% { opacity: 1; transform: scale(1.2) rotate(15deg); }
+        }
+
+        .animate-peony-in { animation: peony-reveal 1.2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; }
+        .animate-row-in { animation: peony-row-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; transform-origin: top; }
+        .animate-exit { animation: peony-exit 0.4s cubic-bezier(0.4, 0, 1, 1) forwards; pointer-events: none; }
+        .animate-star { display: inline-block; animation: star-twinkle 0.8s infinite ease-in-out; }
+
+        .peony-transition { transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1); }
+        .peony-add-btn { border: 1px solid transparent; }
+        .peony-add-btn:hover { background: white !important; transform: translateY(-1px); }
+        .peony-add-row-btn:hover { border-color: #a855f7 !important; color: #a855f7 !important; }
+        .peony-add-col-btn:hover { border-color: #ec4899 !important; color: #ec4899 !important; }
+
+        .peony-del-btn:not(:disabled):hover {
+          background: radial-gradient(circle, #ef4444 0%, #b91c1c 100%) !important;
+          color: white !important;
+          border-color: transparent !important;
+          transform: translateY(-1px);
+        }
+
+        .peony-export-btn { border: 1px solid rgba(255, 255, 255, 0.6); }
+        .peony-export-btn:hover {
+          border-color: #a855f7 !important;
+          color: #a855f7 !important;
+          background: white !important;
+          transform: translateY(-1px);
+        }
+        .peony-save-btn:hover { transform: translateY(-1px); filter: brightness(1.05); }
+
+        .delay-1 { animation-delay: 0.2s; opacity: 0; }
+        .delay-2 { animation-delay: 0.4s; opacity: 0; }
+      `}</style>
+
+      {/* 1. GLASS TOOLBAR */}
+      <div className={`mb-8 flex gap-3 flex-wrap items-center bg-white/30 backdrop-blur-xl p-2 rounded-[2rem] border border-white/40 shadow-2xl shadow-purple-500/5 sticky top-0 z-20 animate-peony-in ${isSyncing ? 'pointer-events-none opacity-50' : ''}`}>
+        <div className="flex bg-white/40 p-1 rounded-2xl border border-white/20">
+          <button onClick={() => addRow("above")} className="peony-transition peony-add-btn peony-add-row-btn px-4 py-2 rounded-xl text-[11px] font-black text-slate-600 uppercase tracking-tighter active:scale-95">Row ↑</button>
+          <button onClick={() => addRow("below")} className="peony-transition peony-add-btn peony-add-row-btn px-4 py-2 rounded-xl text-[11px] font-black text-slate-600 uppercase tracking-tighter active:scale-95">Row ↓</button>
+          <div className="w-px h-4 bg-white/40 self-center mx-1" />
+          <button onClick={() => addColumn("before")} className="peony-transition peony-add-btn peony-add-col-btn px-4 py-2 rounded-xl text-[11px] font-black text-slate-600 uppercase tracking-tighter active:scale-95">Col ←</button>
+          <button onClick={() => addColumn("after")} className="peony-transition peony-add-btn peony-add-col-btn px-4 py-2 rounded-xl text-[11px] font-black text-slate-600 uppercase tracking-tighter active:scale-95">Col →</button>
         </div>
 
-        <div className="flex gap-1 pr-3 border-r border-slate-200">
-          <button onClick={() => handleAddCol("before")} className="px-3 py-1.5 hover:bg-white hover:shadow-sm rounded-lg text-xs font-bold text-slate-600 transition-all border border-transparent hover:border-slate-200">
-            + Col Left
-          </button>
-          <button onClick={() => handleAddCol("after")} className="px-3 py-1.5 hover:bg-white hover:shadow-sm rounded-lg text-xs font-bold text-slate-600 transition-all border border-transparent hover:border-slate-200">
-            + Col Right
-          </button>
-        </div>
-
-        <div className="flex gap-1 pr-3 border-r border-slate-200">
+        <div className="flex bg-red-50/10 p-1 rounded-2xl border border-red-100/10 gap-1">
           <button
-            onClick={() => selectedCell && setActiveModal({ type: "delete_row", title: "Smazat řádek", description: "Opravdu smazat vybraný řádek?" })}
-            disabled={selectedCell === null}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border border-transparent ${selectedCell !== null ? 'hover:bg-red-50 text-red-600 hover:border-red-100' : 'opacity-30 text-slate-400'}`}
+            disabled={!selectedCell}
+            onClick={() => setActiveModal({
+              type: "delete_row",
+              title: "Terminate Row",
+              description: "This action will permanently remove the record from the current instance."
+            })}
+            className={`peony-transition peony-del-btn px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-tighter flex items-center gap-2 ${selectedCell ? 'bg-white/60 text-red-500 shadow-sm active:scale-95' : 'opacity-10 text-slate-400'}`}
           >
             Del Row
           </button>
           <button
-            onClick={() => selectedCell && setActiveModal({ type: "delete_col", title: "Smazat sloupec", description: "Opravdu smazat vybraný sloupec?" })}
-            disabled={selectedCell === null || selectedCell.col === 0}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border border-transparent ${(selectedCell !== null && selectedCell.col !== 0) ? 'hover:bg-red-50 text-red-600 hover:border-red-100' : 'opacity-30 text-slate-400'}`}
+            disabled={!selectedCell || selectedCell.col === 0}
+            onClick={() => setActiveModal({
+              type: "delete_col",
+              title: "Drop Column",
+              description: "Warning: All data within this column will be discarded across the entire table structure."
+            })}
+            className={`peony-transition peony-del-btn px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-tighter flex items-center gap-2 ${(selectedCell && selectedCell.col !== 0) ? 'bg-white/60 text-red-500 shadow-sm active:scale-95' : 'opacity-10 text-slate-400'}`}
           >
             Del Col
           </button>
         </div>
 
         <div className="flex gap-2 ml-auto">
-          <button onClick={onExport} className="px-4 py-1.5 bg-white text-slate-600 border border-slate-200 rounded-lg text-xs font-bold hover:bg-slate-50 transition-all shadow-sm active:scale-95">
+          <button onClick={onExport} className="peony-transition peony-export-btn px-6 py-2.5 bg-white/40 text-slate-600 rounded-2xl text-[11px] font-black uppercase tracking-widest active:scale-95 shadow-sm">
             Export
           </button>
           <button
-            onClick={() => setActiveModal({ type: "save", title: "Uložit do DB", description: "Chcete synchronizovat aktuální verzi tabulky s databází?" })}
-            className="px-4 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-all shadow-md active:scale-95 flex items-center gap-2"
+            onClick={() => setActiveModal({
+              type: "save",
+              title: "Cloud Migration",
+              description: "Initiate synchronization sequence to commit local changes to the remote database?"
+            })}
+            className="peony-transition peony-save-btn px-6 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-500 text-white rounded-2xl text-[11px] font-black shadow-lg shadow-emerald-200/40 uppercase tracking-[0.2em] active:scale-95 flex items-center gap-2"
           >
-            <span>💾</span> Save Table
+            Save Table
           </button>
         </div>
       </div>
 
-      {/* TABLE AREA */}
-      <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white">
-        <table className="w-full border-collapse">
-          <thead>
-            <tr className="bg-slate-50 border-b border-slate-200">
-              {normalizedTable.columns.map((col, i) => {
-                const isEditingCol = editingValue?.r === -1 && editingValue?.c === i;
-                const displayColValue = isEditingCol ? editingValue.val : col;
+      {/* 2. TRANSPARENT GRID TABLE */}
+      <div className="relative border-2 border-white/40 rounded-[2.5rem] overflow-hidden shadow-2xl bg-white/10 backdrop-blur-md animate-peony-in delay-1">
 
-                return (
-                  <th key={i} className="border-r border-slate-200 last:border-0 p-0">
-                    <input
-                      value={displayColValue}
-                      readOnly={i === 0}
-                      onChange={e => setEditingValue({ r: -1, c: i, val: e.target.value })}
-                      onBlur={() => {
-                        if (editingValue && editingValue.r === -1) {
-                          updateColumnName(i, editingValue.val);
-                          setEditingValue(null);
-                        }
-                      }}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-                      }}
-                      className={`w-full bg-transparent px-4 py-3 outline-none text-[11px] font-black uppercase tracking-widest transition-colors ${i === 0 ? 'text-slate-400 cursor-default' : 'text-slate-500 focus:text-indigo-600'}`}
-                    />
-                  </th>
-                );
-              })}
+        {/* SHIMMER OVERLAY */}
+        {isSyncing && (
+          <div className="absolute inset-0 z-50 pointer-events-none overflow-hidden">
+            <div
+              className="absolute inset-0 w-1/2 h-full bg-gradient-to-r from-transparent via-white/40 to-transparent"
+              style={{ animation: 'shimmer-sweep 1.2s infinite' }}
+            />
+          </div>
+        )}
+
+        <table className={`w-full border-collapse table-fixed transition-opacity duration-500 ${isSyncing ? 'opacity-40' : 'opacity-100'}`}>
+          <thead>
+            <tr className="bg-white/40 border-b-2 border-slate-300/40">
+              {normalizedTable.columns.map((col, i) => (
+                <th
+                  key={`col-static-${i}`}
+                  className={`border-r-2 border-slate-300/40 last:border-0 p-0 ${i === 0 ? 'w-20' : ''} ${purgingCol === i ? 'animate-exit' : ''}`}
+                >
+                  <input
+                    value={editingValue?.r === -1 && editingValue?.c === i ? editingValue.val : col}
+                    readOnly={i === 0 || isSyncing}
+                    onChange={e => setEditingValue({ r: -1, c: i, val: e.target.value })}
+                    onBlur={() => { if (editingValue?.r === -1) { updateColumnName(i, editingValue.val); setEditingValue(null); } }}
+                    className={`peony-transition w-full bg-transparent px-4 py-5 outline-none text-[10px] font-black uppercase tracking-[0.2em] text-center ${i === 0 ? 'text-slate-400/50' : 'text-purple-800/70 focus:text-purple-600'}`}
+                  />
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
             {normalizedTable.rows.map((row, rIdx) => (
-              <tr key={rIdx} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/30 transition-colors">
-                {row.map((cell, cIdx) => {
-                  const isEditing = editingValue?.r === rIdx && editingValue?.c === cIdx;
-                  const displayValue = isEditing ? editingValue.val : cell;
+              <tr
+                key={row[0]}
+                className={`group border-b-2 border-slate-300/30 last:border-0 animate-row-in ${purgingRow === rIdx ? 'animate-exit' : ''}`}
+              >
+                {row.map((cell, cIdx) => (
+                  <td
+                    key={`cell-${cIdx}`}
+                    className={`peony-transition border-r-2 border-slate-300/30 last:border-0 p-0 relative
+                      ${selectedCell?.row === rIdx && selectedCell?.col === cIdx ? "bg-white/40 z-10" : "hover:bg-white/10"}
+                      ${purgingCol === cIdx ? 'animate-exit' : ''}
+                    `}
+                    onClick={() => !isSyncing && setSelectedCell({ row: rIdx, col: cIdx })}
+                  >
+                    {selectedCell?.row === rIdx && selectedCell?.col === cIdx && (
+                      <div className="absolute inset-0 ring-2 ring-purple-400/50 ring-inset pointer-events-none shadow-[0_0_15px_rgba(168,85,247,0.1)]" />
+                    )}
 
-                  return (
-                    <td
-                      key={cIdx}
-                      className={`border-r border-slate-100 last:border-0 p-0 transition-all ${
-                        selectedCell?.row === rIdx && selectedCell?.col === cIdx ? "bg-indigo-50 ring-1 ring-inset ring-indigo-200" : ""
-                      }`}
-                      onClick={() => setSelectedCell({ row: rIdx, col: cIdx })}
-                    >
-                      {cIdx === 0 ? (
-                        <div className="px-4 py-2 text-[10px] font-mono text-slate-400 select-none bg-slate-50/50">{cell}</div>
-                      ) : (
-                        <input
-                          value={displayValue}
-                          onChange={e => setEditingValue({ r: rIdx, c: cIdx, val: e.target.value })}
-                          onBlur={() => {
-                            if (editingValue && editingValue.r !== -1) {
-                              handleCellChange(rIdx, cIdx, editingValue.val);
-                              setEditingValue(null);
-                            }
-                          }}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-                          }}
-                          className="w-full bg-transparent px-4 py-2 outline-none text-sm text-slate-700 focus:text-indigo-700 transition-colors"
-                        />
-                      )}
-                    </td>
-                  );
-                })}
+                    {cIdx === 0 ? (
+                      <div className="relative h-full w-full min-h-[52px] flex items-center justify-center overflow-hidden">
+                        <div className={`px-4 py-4 text-[10px] font-black font-mono tracking-wider select-none bg-white/5 transition-all duration-500 ${isSyncing ? 'opacity-0 scale-50' : 'opacity-1 text-slate-400/40'}`}>
+                          {cell}
+                        </div>
+                        {isSyncing && (
+                          <div className="absolute inset-0 flex items-center justify-center gap-1.5">
+                            {[1, 2, 3].map((i) => (
+                              <span
+                                key={i}
+                                className="animate-star text-pink-500 font-bold text-[14px]"
+                                style={{ animationDelay: `${i * 0.15}s` }}
+                              >
+                                ✦
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <input
+                        value={editingValue?.r === rIdx && editingValue?.c === cIdx ? editingValue.val : cell}
+                        readOnly={isSyncing}
+                        onChange={e => setEditingValue({ r: rIdx, c: cIdx, val: e.target.value })}
+                        onBlur={() => { if (editingValue && editingValue.r !== -1) { handleCellChange(rIdx, cIdx, editingValue.val); setEditingValue(null); } }}
+                        className={`peony-transition w-full bg-transparent px-5 py-4 outline-none text-[13px] ${selectedCell?.row === rIdx && selectedCell?.col === cIdx ? "text-purple-900 font-black" : "text-slate-700 font-semibold focus:text-purple-600"}`}
+                      />
+                    )}
+                  </td>
+                ))}
               </tr>
             ))}
           </tbody>
         </table>
+      </div>
+
+      {/* 3. FOOTER STATS */}
+      <div className={`mt-8 flex items-center px-6 animate-peony-in delay-2 transition-opacity ${isSyncing ? 'opacity-20' : 'opacity-100'}`}>
+        <div className="flex gap-3">
+          <div className="peony-transition flex items-center gap-3 bg-white/20 backdrop-blur-sm px-5 py-2 rounded-2xl border border-white/30 shadow-sm">
+            <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
+            <span className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Nodes: {normalizedTable.rows.length}</span>
+          </div>
+          <div className="peony-transition flex items-center gap-3 bg-white/20 backdrop-blur-sm px-5 py-2 rounded-2xl border border-white/30 shadow-sm">
+            <span className="w-2 h-2 rounded-full bg-pink-500" />
+            <span className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Cols: {normalizedTable.columns.length}</span>
+          </div>
+        </div>
       </div>
 
       {activeModal && (
@@ -230,7 +298,7 @@ export function TableEditor({
           variant={activeModal.type === "save" ? "info" : "danger"}
           title={activeModal.title}
           description={activeModal.description}
-          confirmLabel={activeModal.type === "save" ? "Synchronizovat" : "Smazat"}
+          confirmLabel={activeModal.type === "save" ? "Sync" : "Delete"}
           onConfirm={handleConfirmAction}
           onCancel={() => setActiveModal(null)}
         />

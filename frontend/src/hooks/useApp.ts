@@ -38,6 +38,7 @@ export function useApp() {
     undo,
     redo,
     jumpTo,
+    clearHistory
   } = useHistory();
 
   const [historyVisible, setHistoryVisible] = useState(false);
@@ -68,7 +69,7 @@ export function useApp() {
       ...table,
       id: dbId,
       name: table.name
-        .replace(" (klon)", "")
+        .replace(" (clone)", "")
         .replace("_clone_db", "")
         .trim()
     };
@@ -80,7 +81,7 @@ export function useApp() {
     const next = [normalized, ...tables];
 
     commit(
-      `Import dat do tabulky "${normalized.name}"`,
+      `[${normalized.name}] Data Ingested`,
       "row_add",
       normalized.id,
       next
@@ -109,7 +110,7 @@ export function useApp() {
 
   /** -------------------- CRUD -------------------- */
   function handleCreate() {
-    const base = "Nová tabulka";
+    const base = "New Table";
     let name = base;
     let i = 2;
     while (tables.some(t => t.name.toLowerCase() === name.toLowerCase())) {
@@ -119,12 +120,12 @@ export function useApp() {
     const table: TableData = {
       id: "tmp_" + uuid(),
       name,
-      columns: ["ID", "Název", "Vlastnost 1", "Vlastnost 2"],
-      rows: [["1", "Příklad dat", "", ""], ["2", "", "", ""]],
+      columns: ["ID", "Name", "Attribute 1", "Attribute 2"],
+      rows: [["1", "Example data", "", ""], ["2", "", "", ""]],
     };
 
     const next = [table, ...tables];
-    commit(`Vytvoření tabulky "${name}"`, "row_add", table.id, next);
+    commit(`[${name}] Table Initialized`, "row_add", table.id, next);
     setCurrentId(table.id);
   }
 
@@ -134,21 +135,21 @@ export function useApp() {
 
     normalized.id = "clone:" + uuid();
     (normalized as any).originDbId = originalDbId;
-    normalized.name = normalized.name + " (klon)";
+    normalized.name = normalized.name + " (clone)";
 
     const next = [normalized, ...tables];
-    commit(`Klonování tabulky "${table.name}"`, "row_add", normalized.id, next);
+    commit(`[${table.name}] Instance Cloned`, "row_add", normalized.id, next);
     setCurrentId(normalized.id);
   }
 
   function handleRename(id: string, newName: string) {
     const prev = tables.find(t => t.id === id);
     if (!prev) return;
-
-    if (prev.name.trim() === newName.trim()) return;
+    const oldName = prev.name;
+    if (oldName.trim() === newName.trim()) return;
 
     const next = tables.map(t => (t.id === id ? { ...t, name: newName.trim() } : t));
-    commit(`Přejmenování "${prev.name}" na "${newName.trim()}"`, "rename", id, next);
+    commit(`[${oldName}] Identifier Updated to "${newName.trim()}"`, "rename", id, next);
   }
 
   function handleChangeTable(updated: TableData, description?: string) {
@@ -165,34 +166,58 @@ export function useApp() {
     if (!prev) return;
 
     const next = tables.filter(t => t.id !== id);
-    commit(`Smazání tabulky "${prev.name}"`, "row_delete", id, next);
+    commit(`[${prev.name}] Entity Deleted`, "row_delete", id, next);
 
     if (currentId === id) setCurrentId(null);
   }
 
   function handleDeleteMultiple(ids: string[]) {
+    const count = ids.length;
     const next = tables.filter(t => !ids.includes(t.id));
-    commit(`Hromadné smazání [${ids.length}] tabulek`, "bulk_action", "multiple", next);
+    commit(`[System] Bulk Delete Executed (${count} entities)`, "bulk_action", "multiple", next);
 
     if (currentId && ids.includes(currentId)) setCurrentId(null);
   }
 
   /** -------------------- DB SYNC -------------------- */
   const syncWithState = (syncedTables: TableData[], originalRequestIds: string[]) => {
-    let next = tables.filter(t => !originalRequestIds.includes(t.id));
+    // Vytvoříme pracovní kopii aktuálních tabulek
+    let next = [...tables];
 
-    syncedTables.forEach(saved => {
-      const idx = next.findIndex(t => t.id === saved.id);
-      if (idx > -1) next[idx] = saved;
-      else next.push(saved);
+    // Iterujeme přes tabulky, které se vrátily ze serveru
+    syncedTables.forEach((synced, index) => {
+      const originalId = originalRequestIds[index];
+
+      // Hledáme, kde v našem seznamu tato tabulka sedí
+      const existingIdx = next.findIndex(t => t.id === originalId);
+
+      if (existingIdx > -1) {
+        // Pokud jsme ji našli, nahradíme ji novou verzí (už má DB ID)
+        next[existingIdx] = synced;
+      } else {
+        // Pokud ID nesouhlasí (už se jednou syncovala), zkusíme ji najít podle DB ID
+        const dbIdx = next.findIndex(t => t.id === synced.id);
+        if (dbIdx > -1) {
+          next[dbIdx] = synced;
+        } else {
+          // Pokud je úplně nová, přidáme ji na začátek
+          next.unshift(synced);
+        }
+      }
     });
 
-    commit(`Synchronizace s databází`, "sync", "sync", next);
-    setCurrentId(null);
+    // Tímto přístupem jsme v 'next' ponechali vše, co tam bylo (klony, jiné tabulky),
+    // a pouze aktualizovali ty, které se reálně synchronizovaly.
+    commit(`[System] Remote Sync Completed`, "sync", "sync", next);
+
+    // Resetujeme currentId jen pokud už v seznamu neexistuje
+    if (currentId && !next.some(t => t.id === currentId)) {
+        setCurrentId(null);
+    }
   };
 
-  async function handleSaveTable() {
-    if (!currentTable) return;
+  async function handleSaveTable(): Promise<boolean> {
+    if (!currentTable) return false;
     const dataToSend = prepareForDb(currentTable);
 
     try {
@@ -202,17 +227,25 @@ export function useApp() {
         body: JSON.stringify({ tables: [dataToSend] }),
       });
       const result = await res.json();
-      if (result.success) syncWithState(result.data, [currentTable.id]);
-    } catch {
-      alert("❌ Chyba při ukládání tabulky.");
+      if (result.success) {
+        syncWithState(result.data, [currentTable.id]);
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error("Save error:", err);
+      return false;
     }
   }
 
   async function handleSaveAll(ids?: string[]) {
-    const idsToSend = ids || tables.map(t => t.id);
+    const idsToSend = ids || tables.filter(t => t.id.startsWith("tmp_")).map(t => t.id);
+
     const payload = tables
       .filter(t => idsToSend.includes(t.id))
       .map(t => prepareForDb(t));
+
+    if (payload.length === 0) return false;
 
     try {
       const res = await fetch("http://localhost:4000/tables/sync", {
@@ -221,9 +254,13 @@ export function useApp() {
         body: JSON.stringify({ tables: payload }),
       });
       const result = await res.json();
-      if (result.success) syncWithState(result.data, idsToSend);
+      if (result.success) {
+        syncWithState(result.data, idsToSend);
+        return true;
+      }
+      return false;
     } catch {
-      alert("❌ Hromadná synchronizace selhala.");
+      return false;
     }
   }
 
@@ -240,6 +277,7 @@ export function useApp() {
     undo: () => undo(updateTables, setCurrentId),
     redo: () => redo(updateTables, setCurrentId),
     jumpTo: (index: number) => jumpTo(index, updateTables, setCurrentId),
+    clearHistory,
     handleCreate,
     handleClone,
     handleImportFromClipboard,

@@ -53,6 +53,16 @@ export function useHistory() {
     }
   }, []);
 
+  /**
+   * SMAZÁNÍ HISTORIE
+   * Kompletně vyčistí auditní log a zresetuje indexy.
+   */
+  const clearHistory = () => {
+    setHistory([]);
+    setHistoryIndex(-1);
+    localStorage.removeItem(STORAGE_KEY);
+  };
+
   /** * JEDINÝ ZDROJ PRAVDY PRO CESTOVÁNÍ ČASEM
    * Aplikuje snapshot na konkrétním indexu na aktuální tabulky.
    */
@@ -118,6 +128,7 @@ export function useHistory() {
     history,
     historyIndex,
     pushHistory,
+    clearHistory, // <-- Export nové funkce
     // Veřejné API pro Time-Travel
     jumpTo: (index: number, updateTables: any, setCurrentId: any) =>
       applyHistoryState(index, updateTables, setCurrentId),

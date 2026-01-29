@@ -6,6 +6,12 @@ import type { TableData } from "../lib/storage";
 const API_URL = "http://localhost:4000/tables";
 const SOCKET_URL = "http://localhost:4000";
 
+// Pomocná funkce, abychom se neopakovali
+const isLocalOnly = (id: string | number) => {
+  const sId = String(id);
+  return sId.startsWith("tmp_") || sId.startsWith("clone:");
+};
+
 export function useTables() {
   const [tables, setTables] = useState<TableData[]>([]);
 
@@ -19,12 +25,13 @@ export function useTables() {
         const res = await fetch(API_URL);
         const dbTables: TableData[] = await res.json();
 
-        const merged = [...dbTables];
-        const localTmpTables = local.filter(t => String(t.id).startsWith("tmp_"));
+        // FIX: Zachováváme tmp_ i clone:
+        const localOnly = local.filter(t => isLocalOnly(t.id));
 
-        localTmpTables.forEach(tmpT => {
-          if (!merged.find(t => t.id === tmpT.id)) {
-            merged.push(tmpT);
+        const merged = [...dbTables];
+        localOnly.forEach(localT => {
+          if (!merged.find(t => t.id === localT.id)) {
+            merged.push(localT);
           }
         });
 
@@ -47,22 +54,20 @@ export function useTables() {
       console.log("Real-time update přijat:", payload);
 
       if (payload.operation === "DELETE") {
-        // Okamžitě odstraníme smazanou tabulku ze stavu
         setTables((prev) => {
           const next = prev.filter((t) => String(t.id) !== String(payload.id));
           localStorage.setItem("peony_tables", JSON.stringify(next));
           return next;
         });
       } else {
-        // Pro INSERT nebo UPDATE (např. změna názvu v DB)
-        // je nejjednodušší data znovu přenačíst z API
         fetch(API_URL)
           .then((res) => res.json())
           .then((dbTables) => {
             setTables((prev) => {
-              // Zachováme lokální dočasné tabulky (tmp_)
-              const tmpOnes = prev.filter(t => String(t.id).startsWith("tmp_"));
-              const merged = [...dbTables, ...tmpOnes];
+              // FIX: Tady byla hlavní chyba! Musíme zachovat tmp_ i clone:
+              const localOnly = prev.filter(t => isLocalOnly(t.id));
+
+              const merged = [...dbTables, ...localOnly];
               localStorage.setItem("peony_tables", JSON.stringify(merged));
               return merged;
             });

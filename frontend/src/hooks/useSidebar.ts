@@ -1,9 +1,9 @@
 // src/hooks/useSidebar.ts
 import { useState, useMemo } from "react";
-import type { Table } from "../domain/table";
+import type { TableData } from "../lib/storage"; // Sjednoceno na TableData
 
 interface UseSidebarProps {
-  tables: Table[];
+  tables: TableData[];
   currentId: string | null;
   onSelect: (id: string) => void;
   onCreate: () => void;
@@ -11,11 +11,10 @@ interface UseSidebarProps {
   onDelete: (id: string) => void;
   onDeleteMultiple: (ids: string[]) => void;
   onPaste: () => void;
-  onClone: (table: Table) => void;
+  onClone: (table: TableData) => void;
   onSaveAll: (ids: string[]) => void;
 }
 
-// Definice typu pro stav modálu
 export type SidebarModalState = {
   type: "delete" | "sync";
   targets: string[];
@@ -38,11 +37,9 @@ export function useSidebar(props: UseSidebarProps) {
   const [renameId, setRenameId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-
-  // Stav pro ActionModal
   const [activeModal, setActiveModal] = useState<SidebarModalState>(null);
 
-  // Filtrované tabulky z DB
+  // Filter for Database (Master) Tables
   const dbTables = useMemo(
     () => tables.filter(t =>
       !t.id.startsWith("tmp_") &&
@@ -52,7 +49,7 @@ export function useSidebar(props: UseSidebarProps) {
     [tables, search]
   );
 
-  // Filtrované lokální pracovní kopie
+  // Filter for Local Workspace Copies
   const localTables = useMemo(
     () => tables.filter(t =>
       (t.id.startsWith("tmp_") || t.id.startsWith("clone:")) &&
@@ -61,9 +58,8 @@ export function useSidebar(props: UseSidebarProps) {
     [tables, search]
   );
 
-  /** --- AKCE PRO MODÁLY --- */
+  /** --- MODAL ACTIONS --- */
 
-  // Potvrzení akce v modálu
   const confirmModal = () => {
     if (!activeModal) return;
 
@@ -81,10 +77,9 @@ export function useSidebar(props: UseSidebarProps) {
     setActiveModal(null);
   };
 
-  /** --- TRIGGERY MODÁLŮ --- */
+  /** --- TRIGGER HANDLERS --- */
 
-  // Mazání jedné tabulky (voláno z TableList)
-  const handleDeleteClick = (table: Table) => {
+  const handleDeleteClick = (table: TableData) => {
     setActiveModal({
       type: "delete",
       targets: [table.id],
@@ -106,7 +101,7 @@ export function useSidebar(props: UseSidebarProps) {
     }
   };
 
-  /** --- SELEKCE --- */
+  /** --- SELECTION LOGIC --- */
 
   const toggleSelect = (id: string) => {
     setSelectedIds(prev =>
@@ -114,23 +109,20 @@ export function useSidebar(props: UseSidebarProps) {
     );
   };
 
-  // NOVÉ: Funkce pro hromadné označení/odoznačení viditelných lokálních tabulek
   const toggleSelectAll = () => {
     const allLocalIds = localTables.map(t => t.id);
     const areAllSelected = allLocalIds.length > 0 && allLocalIds.every(id => selectedIds.includes(id));
 
     if (areAllSelected) {
-      // Pokud jsou všechny vybrané, odoznačíme ty, které jsou aktuálně v localTables
       setSelectedIds(prev => prev.filter(id => !allLocalIds.includes(id)));
     } else {
-      // Jinak přidáme všechny z localTables (pomocí Set zajistíme unikátnost)
       setSelectedIds(prev => Array.from(new Set([...prev, ...allLocalIds])));
     }
   };
 
-  /** --- OSTATNÍ AKCE --- */
+  /** --- CORE ACTIONS --- */
 
-  const startRename = (t: Table) => {
+  const startRename = (t: TableData) => {
     setRenameId(t.id);
     setRenameValue(t.name);
   };
@@ -140,11 +132,25 @@ export function useSidebar(props: UseSidebarProps) {
     setRenameId(null);
   };
 
-  const handleDbClick = (t: Table) => {
-    const cloneId = `clone:${t.id}`;
-    const existingClone = localTables.find(lt => lt.id === cloneId);
-    if (existingClone) onSelect(existingClone.id);
-    else onClone({ ...t, id: cloneId, name: `${t.name}_clone_db` });
+  /**
+   * FIX: DATABASE CLICK LOGIC
+   * Kontroluje, zda již existuje lokální klon pro danou DB tabulku.
+   */
+  const handleDbClick = (t: TableData) => {
+    const targetCloneName = `${t.name} (clone)`;
+
+    // Hledáme klon, který má buď stejný název, nebo odkazuje na originální ID
+    const existingClone = localTables.find(lt =>
+      lt.name === targetCloneName || (lt as any).originDbId === t.id
+    );
+
+    if (existingClone) {
+      // Pokud klon už v pracovním prostoru je, jen ho aktivujeme
+      onSelect(existingClone.id);
+    } else {
+      // Jinak vytvoříme nový klon (handleClone v useApp se postará o zbytek)
+      onClone(t);
+    }
   };
 
   return {
@@ -165,7 +171,7 @@ export function useSidebar(props: UseSidebarProps) {
     handleDbClick,
     selectedIds,
     toggleSelect,
-    toggleSelectAll, // Exportováno pro Sidebar
+    toggleSelectAll,
     handleDeleteSelected,
     handleSaveSelected,
   };

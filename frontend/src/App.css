@@ -40,3 +40,48 @@
 .read-the-docs {
   color: #888;
 }
+
+/* Custom Scrollbar pro Peony OS Sidebar */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px; /* Velmi decentní šířka */
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent; /* Nerušivé pozadí */
+  margin: 8px 0; /* Odsazení od horního/dolního okraje */
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #f1f5f9; /* Slate-100 */
+  border-radius: 10px;
+  transition: all 0.5s ease-in-out;
+}
+
+.custom-scrollbar:hover::-webkit-scrollbar-thumb {
+  background: #e2e8f0; /* Slate-200 při najetí na seznam */
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #d8b4fe; /* Purple-300 - jemné zfialovění při přímém doteku scrollbaru */
+}
+
+/* Globální plynulé mizení/objevování */
+.peony-fade-enter {
+  opacity: 0;
+  filter: blur(10px);
+  transform: scale(0.98);
+}
+
+.peony-fade-active {
+  opacity: 1;
+  filter: blur(0);
+  transform: scale(1);
+  transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.peony-fade-exit {
+  opacity: 0;
+  filter: blur(15px);
+  transform: translateY(10px) scale(0.95);
+  transition: all 0.6s cubic-bezier(0.4, 0, 1, 1);
+}
