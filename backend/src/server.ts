@@ -8,21 +8,43 @@ import { errorHandler } from "./shared/middleware/errorHandler.js";
 
 const app = express();
 
-// 1. Vytvoření HTTP serveru pro Socket.io
+/** -------------------- CORS CONFIGURATION -------------------- */
+// Seznam povolených adres, které mohou volat tvůj backend
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://peony-tabs.vercel.app",
+  "https://tabs-pnzn50m56-jan-pivonkas-projects.vercel.app"
+];
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Povolíme požadavky bez origin (třeba mobilní aplikace nebo postman)
+    // nebo ty, které jsou v našem seznamu
+    if (!origin || allowedOrigins.includes(origin) || origin.endsWith(".vercel.app")) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  credentials: true,
+  optionsSuccessStatus: 200
+};
+
+/** -------------------- SERVER INITIALIZATION -------------------- */
 const httpServer = createServer(app);
 
-// 2. Inicializace Socket.io se stabilnějším nastavením pro Free Tier
+// Inicializace Socket.io s CORS nastavením
 const io = new Server(httpServer, {
-  cors: {
-    origin: "*", // Zde v produkci doplň URL svého frontendu na Vercelu
-    methods: ["GET", "POST"]
-  },
-  transports: ["polling", "websocket"] // Polling pomáhá udržet spojení na Render Free Tieru
+  cors: corsOptions,
+  transports: ["polling", "websocket"]
 });
 
-app.use(cors());
+// Aplikace CORS na Express (pro běžné API požadavky přes fetch)
+app.use(cors(corsOptions));
 app.use(express.json());
 
+/** -------------------- ROUTES -------------------- */
 app.use("/tables", tableRoutes);
 
 app.get("/", (_req, res) => res.send("Backend běží 🚀"));
@@ -30,15 +52,15 @@ app.get("/health", (_req, res) =>
   res.json({ ok: true, ts: new Date().toISOString() })
 );
 
+// Middleware pro zpracování chyb (musí být až po routách)
 app.use(errorHandler);
 
-// 3. Konfigurace Postgres Listeneru
-// Robustnější kontrola DATABASE_URL a SSL
+/** -------------------- POSTGRES LISTENER -------------------- */
 const dbUrl = process.env.DATABASE_URL;
 
 const pgClient = new pg.Client({
   connectionString: dbUrl,
-  // Pokud běžíme na Renderu (není localhost), vynutíme SSL
+  // Pokud neběžíme na localhostu, vyžadujeme SSL (pro Render)
   ssl: dbUrl?.includes("localhost") || !dbUrl
     ? false
     : { rejectUnauthorized: false }
@@ -46,12 +68,13 @@ const pgClient = new pg.Client({
 
 async function initDbListener() {
   if (!dbUrl) {
-    console.error("❌ Kritická chyba: DATABASE_URL není definována v environment variables!");
+    console.error("❌ Kritická chyba: DATABASE_URL není definována!");
     return;
   }
 
   try {
     await pgClient.connect();
+    // Nasloucháme kanálu 'table_db_change', který musí spouštět Trigger v DB
     await pgClient.query('LISTEN table_db_change');
     console.log("📡 Postgres Listener aktivován (kanál: table_db_change)");
 
@@ -60,6 +83,7 @@ async function initDbListener() {
         try {
           const data = JSON.parse(msg.payload);
           console.log("🔔 Zachycena změna v DB:", data);
+          // Přepošleme info všem připojeným klientům přes Socket.io
           io.emit('db_sync_needed', data);
         } catch (e) {
           console.error("❌ Chyba při parsování JSON payloadu:", e);
@@ -69,7 +93,7 @@ async function initDbListener() {
 
     pgClient.on('error', (err) => {
       console.error("❌ Neočekávaná chyba v Postgres Listeneru:", err);
-      // Pokus o znovupřipojení při výpadku
+      // Pokus o znovupřipojení při výpadku po 5 sekundách
       setTimeout(initDbListener, 5000);
     });
 
@@ -78,13 +102,12 @@ async function initDbListener() {
   }
 }
 
-// Spustíme listener
+// Spustíme listener pro real-time aktualizace
 initDbListener();
 
-// Render si port přiděluje sám, většinou 10000
+/** -------------------- START SERVER -------------------- */
 const PORT = Number(process.env.PORT) || 10000;
 
-// 4. Spuštění serveru na 0.0.0.0 (nutné pro přístup zvenčí na Renderu)
 httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Backend úspěšně spuštěn na portu ${PORT}`);
 });
