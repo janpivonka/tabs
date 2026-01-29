@@ -29,7 +29,7 @@ The primary goal of the project is to demonstrate:
 ## 🚀 Live Demo
 
 **Frontend (Vercel):**
-👉 [https://peony-tabs.vercel.app/](https://peony-tabs.vercel.app/)
+👉 [https://tabs-orcin-five.vercel.app//](https://tabs-orcin-five.vercel.app//)
 
 **Backend API (Render):**
 👉 [https://peony-tabs.onrender.com](https://peony-tabs.onrender.com)
