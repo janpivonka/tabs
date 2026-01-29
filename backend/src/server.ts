@@ -11,16 +11,19 @@ const app = express();
 /** -------------------- CORS CONFIGURATION -------------------- */
 const allowedOrigins = [
   "http://localhost:5173",
-  "https://peony-tabs.vercel.app",
-  "https://tabs-pnzn50m56-jan-pivonkas-projects.vercel.app"
+  "http://localhost:3000",
+  "https://peony-tabs.vercel.app"
 ];
 
-// Explicitně definujeme typ pro corsOptions, aby TypeScript věděl, co origin a callback jsou zač
 const corsOptions: cors.CorsOptions = {
   origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+    // 1. Povolíme požadavky bez origin (mobilní aplikace, server-to-server)
+    // 2. Povolíme naše fixní adresy (localhost, hlavní doména)
+    // 3. Povolíme jakoukoliv subdoménu na vercel.app (dynamické preview odkazy)
     if (!origin || allowedOrigins.includes(origin) || origin.endsWith(".vercel.app")) {
       callback(null, true);
     } else {
+      console.warn(`⚠️ CORS blokováno pro origin: ${origin}`);
       callback(new Error("Not allowed by CORS"));
     }
   },
