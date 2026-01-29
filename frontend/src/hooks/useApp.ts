@@ -8,8 +8,10 @@ import { useHistory, HistoryActionType } from "./useHistory";
 import { useClipboardPaste } from "./useClipboardPaste";
 
 /** -------------------- CONFIG -------------------- */
-// Použije adresu z Vercel Environment Variables, nebo defaultní Render URL
-const BASE_URL = import.meta.env.VITE_API_URL || "https://peony-tabs.onrender.com";
+// --- OPRAVA LOMÍTEK ---
+const RAW_URL = import.meta.env.VITE_API_URL || "https://peony-tabs.onrender.com";
+// Odstraní lomítko na konci, pokud tam je, aby nevznikalo zdvojené //
+const BASE_URL = RAW_URL.replace(/\/$/, "");
 const SYNC_URL = `${BASE_URL}/tables/sync`;
 
 /** -------------------- UTIL -------------------- */
@@ -222,6 +224,13 @@ export function useApp() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tables: [dataToSend] }),
       });
+
+      if (!res.ok) {
+        const text = await res.text();
+        console.error("❌ Server Error Response:", text);
+        return false;
+      }
+
       const result = await res.json();
       if (result.success) {
         syncWithState(result.data, [currentTable.id]);
@@ -250,6 +259,9 @@ export function useApp() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tables: payload }),
       });
+
+      if (!res.ok) return false;
+
       const result = await res.json();
       if (result.success) {
         syncWithState(result.data, idsToSend);

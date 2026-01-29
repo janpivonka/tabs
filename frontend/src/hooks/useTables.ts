@@ -2,8 +2,11 @@ import { useState, useEffect } from "react";
 import { io } from "socket.io-client";
 import type { TableData } from "../lib/storage";
 
-// DYNAMICKÁ ADRESA: Prioritu má proměnná z Vercelu, jinak použije tvůj Render
-const BASE_URL = import.meta.env.VITE_API_URL || "https://peony-tabs.onrender.com";
+// --- OPRAVA LOMÍTEK ---
+const RAW_URL = import.meta.env.VITE_API_URL || "https://peony-tabs.onrender.com";
+// Odstraní lomítko na konci, pokud tam je, aby nevznikalo //
+const BASE_URL = RAW_URL.replace(/\/$/, "");
+
 const API_URL = `${BASE_URL}/tables`;
 const SOCKET_URL = BASE_URL;
 
@@ -26,14 +29,13 @@ export function useTables() {
         console.log(`📡 Pokus o načtení dat z: ${API_URL}`);
         const res = await fetch(API_URL);
 
-        if (!res.ok) throw new Error("Server response was not ok");
+        if (!res.ok) throw new Error(`Server responded with ${res.status}`);
 
         const dbTables: TableData[] = await res.json();
 
-        // FIX: Zachováváme tmp_ i clone:
         const localOnly = local.filter(t => isLocalOnly(t.id));
-
         const merged = [...dbTables];
+
         localOnly.forEach(localT => {
           if (!merged.find(t => t.id === localT.id)) {
             merged.push(localT);
@@ -53,9 +55,8 @@ export function useTables() {
 
   // 2. REAL-TIME SYNCHRONIZACE PŘES WEBSOCKETY
   useEffect(() => {
-    // Inicializace socketu s adresou Renderu
     const socket = io(SOCKET_URL, {
-      transports: ["polling", "websocket"], // Důležité pro Render Free Tier
+      transports: ["polling", "websocket"],
       withCredentials: true
     });
 
@@ -88,7 +89,7 @@ export function useTables() {
     });
 
     socket.on("connect_error", (err) => {
-      console.warn("⚠️ Socket connection error (v pořádku, pokud backend spí):", err.message);
+      console.warn("⚠️ Socket connection error:", err.message);
     });
 
     return () => {
